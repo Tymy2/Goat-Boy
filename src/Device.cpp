@@ -10,12 +10,15 @@ void Device::init(){
 // TODO change implementation, it is really bad to output to console, speed goes really down
 void debug_print(Device * device){
 	uint8_t flags = device->cpu.r[0x1];
-	std::cout << "op_code: ";
-	printf("%02X", int(device->mmu.read(device->cpu.pc)));
-	if(device->mmu.read(device->cpu.pc) == 0xcb){
-		printf(" %02X", int(device->mmu.read(device->cpu.pc+1)));
+	uint8_t op_code = device->mmu.read(device->cpu.pc);
+	uint8_t cb_code = device->mmu.read(device->cpu.pc+1);
+	
+	if(op_code == 0xcb){
+		printf("Op_code: %02x %02x ", op_code, cb_code);
+	}else{
+		printf("Op_code: %02x %2s ", op_code, "");
 	}
-	printf("\tRegisters: [ A: %02x B: %02x C: %02x D: %02x E: %02x H: %02x L: %02x ] Flags: [ Z: %d N: %d H: %d C: %d ] PC: %04x SP: %04x\n", 
+	printf("Registers: [ A: %02x B: %02x C: %02x D: %02x E: %02x H: %02x L: %02x ] Flags: [ Z: %d N: %d H: %d C: %d ] PC: %04x SP: %04x\n", 
 		device->cpu.r[0x0],
 		device->cpu.r[0x2],
 		device->cpu.r[0x3],
