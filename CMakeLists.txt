@@ -4,7 +4,7 @@ project(GoatBoy VERSION 1.0 DESCRIPTION "A Gameboy emulator" LANGUAGES CXX)
 
 add_subdirectory("libs/SDL")
 
-add_executable(GoatBoy src/Goatboy.cpp src/Device.cpp src/Gui.cpp)
+add_executable(GoatBoy src/Goatboy.cpp src/Gui.cpp src/Mmu.cpp src/Cpu.cpp src/Device.cpp src/instructions.cpp)
 target_link_libraries(GoatBoy PRIVATE SDL2)
 target_link_libraries(GoatBoy PRIVATE SDL2main)
 
