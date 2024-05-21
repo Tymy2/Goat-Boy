@@ -13,6 +13,7 @@ class CPU {
 		uint16_t pc = 0x0;
 		uint16_t sp = 0x0;
 		void (* instructions[0x100])(Device *) = {};
+		void (* cb_instructions[0x100])(Device *) = {};
 		Device * device = NULL;
 
 		uint8_t fetch();

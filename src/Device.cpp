@@ -5,6 +5,7 @@
 void Device::init(){
 	this->cpu.device = this;
 	setup_instructions(this);
+	setup_cb_instructions(this);
 }
 
 // TODO change implementation, it is really bad to output to console, speed goes really down

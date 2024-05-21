@@ -636,18 +636,8 @@ void rst(Device * device, uint8_t addr){
 }
 
 void prefix_cb(Device * device){
-	// TODO  this is temporal for bootrom testing only purposes
 	uint8_t cb_op = device->cpu.fetch();
-	if(cb_op == 0x7c){
-		device->cpu.set_flags(0b1110, ( (((device->cpu.r[H] >> 7) & 0x1) ^ 0x1) << 3) + (0x1 << 1) );
-	}else if (cb_op == 0x4f){
-		device->cpu.set_flags(0b1110, ( (((device->cpu.r[A] >> 1) & 0x1) ^ 0x1) << 3) + (0x1 << 1) );
-	}else if (cb_op == 0x11){
-		bool c = device->cpu.r[C] >> 7;
-		device->cpu.r[C] = ((device->cpu.r[C] << 1) & 0xff) + ((device->cpu.r[F] >> 4) & 0x1);
-		bool z = calc_z(device->cpu.r[C]);
-		device->cpu.set_flags(0b1111, (z << 3) + c);
-	}
+	(* device->cpu.cb_instructions[cb_op])(device);
 }
 
 void illegal_op(Device * device){
@@ -950,4 +940,472 @@ void setup_instructions(Device * device){
 	&_0xf0, &_0xf1, &_0xf2, &_0xf3, &_0xf4, &_0xf5, &_0xf6, &_0xf7, &_0xf8, &_0xf9, &_0xfa, &_0xfb, &_0xfc, &_0xfd, &_0xfe, &_0xff
 	};
 	std::copy(instructions, instructions+0x100, device->cpu.instructions);
+}
+
+//CB INSTRUCTIONS
+//TODO some instructions are not correct, dont know which implementation is the correct one, requires testing in future
+
+void rlc_r(Device * device, uint8_t _r){
+	uint8_t value = device->cpu.r[_r];
+	uint8_t bit = value >> 7;
+	value = (value << 1) | bit;
+	bool z = calc_z(value);
+	device->cpu.r[_r] = value;
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void rlc_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	uint8_t bit = value >> 7;
+	value = (value << 1) | bit;
+	bool z = calc_z(value);
+	device->mmu.write(addr, value);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void rrc_r(Device * device, uint8_t _r){
+	uint8_t value = device->cpu.r[_r];
+	uint8_t bit = value & 0x1;
+	value = (value >> 1) | (bit << 7);
+	bool z = calc_z(value);
+	device->cpu.r[_r] = value;
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void rrc_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	uint8_t bit = value && 0x1;
+	value = (value >> 1) | (bit << 7);
+	bool z = calc_z(value);
+	device->mmu.write(addr, value);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void rl_r(Device * device, uint8_t _r){
+	bool bit = device->cpu.r[_r] >> 7;
+	device->cpu.r[_r] = ((device->cpu.r[_r] << 1) & 0xff) + ((device->cpu.r[F] >> 4) & 0x1);
+	bool z = calc_z(device->cpu.r[_r]);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void rl_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	bool bit = value >> 7;
+	value = ((value << 1) & 0xff) + ((device->cpu.r[F] >> 4) & 0x1 );
+	bool z = calc_z(value);
+	device->mmu.write(addr, value);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void rr_r(Device * device, uint8_t _r){
+	bool bit = device->cpu.r[_r] & 0x1;
+	device->cpu.r[_r] = ((device->cpu.r[_r] >> 1) & 0xff) + (((device->cpu.r[F] >> 4) & 0x1) << 7);
+	bool z = calc_z(device->cpu.r[_r]);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void rr_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	bool bit = value & 0x1;
+	value = ((value >> 1) & 0xff) + (((device->cpu.r[F] >> 4) & 0x1) << 7);
+	bool z = calc_z(value);
+	device->mmu.write(addr, value);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void sla_r(Device * device, uint8_t _r){
+	uint8_t value = device->cpu.r[_r];
+	uint8_t bit = value >> 7;
+	device->cpu.r[_r] <<= 1;
+	bool z = calc_z(device->cpu.r[_r]);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void sla_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	bool bit = value >> 7;
+	value <<= 1;
+	device->mmu.write(addr, value);	
+	bool z = calc_z(value);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void sra_r(Device * device, uint8_t _r){
+	uint8_t value = device->cpu.r[_r];
+	uint8_t bit_7 = value & 0x80; // get bit at pos 7
+	value >>= 1;
+	value |= bit_7;
+	device->cpu.r[_r] = value;
+	bool z = calc_z(value);
+	device->cpu.set_flags(0b1111, z << 3);
+}
+
+void sra_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	uint8_t bit_7 = value & 0x80; // get bit at pos 7
+	value >>= 1;
+	value |= bit_7;
+	device->mmu.write(addr, value);
+	bool z = calc_z(value);
+	device->cpu.set_flags(0b1111, z << 3);
+}
+
+void srl_r(Device * device, uint8_t _r){
+	uint8_t value = device->cpu.r[_r];
+	bool bit = value & 0x1;
+	value >> 1;
+	bool z = calc_z(value);
+	device->cpu.r[_r] = value;
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void srl_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	bool bit = value & 0x1;
+	value >> 1;
+	bool z = calc_z(value);
+	device->mmu.write(addr, value);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
+}
+
+void bit_n_r(Device * device, uint8_t bit_pos, uint8_t _r){
+	uint8_t value = device->cpu.r[_r];
+	bool bit = ((value >> (bit_pos)) & 0x1) ^ 0x1;
+	device->cpu.set_flags(0b1110, (bit << 3) + (0x1 << 1));
+}
+
+void bit_n_memrr(Device * device, uint8_t bit_pos, uint8_t _rr){
+	uint8_t value = device->mmu.read(device->cpu.rr[_rr]);
+	bool bit = ((value >> (bit_pos)) & 0x1) ^ 0x1;
+	device->cpu.set_flags(0b1110, (bit << 3) + (0x1 << 1));
+}
+
+void res_n_r(Device * device, uint8_t bit_pos, uint8_t _r){
+	device->cpu.r[_r] &= (0x1 << bit_pos) ^ 0xff;
+}
+
+void res_n_memrr(Device * device, uint8_t bit_pos, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	value &= (0x1 << bit_pos) ^ 0xff;
+	device->mmu.write(addr, value);
+}
+
+void set_n_r(Device * device, uint8_t bit_pos, uint8_t _r){
+	device->cpu.r[_r] |= 0x1 << bit_pos;
+}
+
+void set_n_memrr(Device * device, uint8_t bit_pos, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	value |= 0x1 << bit_pos;
+	device->mmu.write(addr, value);
+}
+
+void swap_r(Device * device, uint8_t _r){
+	uint8_t value = device->cpu.r[_r];
+	uint8_t left_nibble = (value >> 4);
+	uint8_t right_nibble = (value & 0xf) << 4;
+	value = left_nibble + right_nibble;
+	device->cpu.r[_r] = value;
+	bool z = calc_z(value);
+	device->cpu.set_flags(0b1111, z << 3);
+}
+
+void swap_memrr(Device * device, uint8_t _rr){
+	uint16_t addr = device->cpu.rr[_rr];
+	uint8_t value = device->mmu.read(addr);
+	uint8_t left_nibble = (value >> 4);
+	uint8_t right_nibble = (value & 0xf) << 4;
+	value = left_nibble + right_nibble;
+	device->mmu.write(addr, value);
+	bool z = calc_z(value);
+	device->cpu.set_flags(0b1111, z << 3);
+}
+
+
+void cb_0x00(Device * device){ rlc_r(device, B); }
+void cb_0x01(Device * device){ rlc_r(device, C); }
+void cb_0x02(Device * device){ rlc_r(device, D); }
+void cb_0x03(Device * device){ rlc_r(device, E); }
+void cb_0x04(Device * device){ rlc_r(device, H); }
+void cb_0x05(Device * device){ rlc_r(device, L); }
+void cb_0x06(Device * device){ rlc_memrr(device, HL); }
+void cb_0x07(Device * device){ rlc_r(device, A); }
+void cb_0x08(Device * device){ rrc_r(device, B); }
+void cb_0x09(Device * device){ rrc_r(device, C); }
+void cb_0x0a(Device * device){ rrc_r(device, D); }
+void cb_0x0b(Device * device){ rrc_r(device, E); }
+void cb_0x0c(Device * device){ rrc_r(device, H); }
+void cb_0x0d(Device * device){ rrc_r(device, L); }
+void cb_0x0e(Device * device){ rrc_memrr(device, HL); }
+void cb_0x0f(Device * device){ rrc_r(device, A); }
+void cb_0x10(Device * device){ rl_r(device, B); }
+void cb_0x11(Device * device){ rl_r(device, C); }
+void cb_0x12(Device * device){ rl_r(device, D); }
+void cb_0x13(Device * device){ rl_r(device, E); }
+void cb_0x14(Device * device){ rl_r(device, H); }
+void cb_0x15(Device * device){ rl_r(device, L); }
+void cb_0x16(Device * device){ rl_memrr(device, HL); }
+void cb_0x17(Device * device){ rl_r(device, A); }
+void cb_0x18(Device * device){ rr_r(device, B); }
+void cb_0x19(Device * device){ rr_r(device, C); }
+void cb_0x1a(Device * device){ rr_r(device, D); }
+void cb_0x1b(Device * device){ rr_r(device, E); }
+void cb_0x1c(Device * device){ rr_r(device, H); }
+void cb_0x1d(Device * device){ rr_r(device, L); }
+void cb_0x1e(Device * device){ rr_memrr(device, HL); }
+void cb_0x1f(Device * device){ rr_r(device, A); }
+void cb_0x20(Device * device){ sla_r(device, B); }
+void cb_0x21(Device * device){ sla_r(device, C); }
+void cb_0x22(Device * device){ sla_r(device, D); }
+void cb_0x23(Device * device){ sla_r(device, E); }
+void cb_0x24(Device * device){ sla_r(device, H); }
+void cb_0x25(Device * device){ sla_r(device, L); }
+void cb_0x26(Device * device){ sla_memrr(device, HL); }
+void cb_0x27(Device * device){ sla_r(device, A); }
+void cb_0x28(Device * device){ sra_r(device, B); }
+void cb_0x29(Device * device){ sra_r(device, C); }
+void cb_0x2a(Device * device){ sra_r(device, D); }
+void cb_0x2b(Device * device){ sra_r(device, E); }
+void cb_0x2c(Device * device){ sra_r(device, H); }
+void cb_0x2d(Device * device){ sra_r(device, L); }
+void cb_0x2e(Device * device){ sra_memrr(device, HL); }
+void cb_0x2f(Device * device){ sra_r(device, A); }
+void cb_0x30(Device * device){ swap_r(device, B); }
+void cb_0x31(Device * device){ swap_r(device, C); }
+void cb_0x32(Device * device){ swap_r(device, D); }
+void cb_0x33(Device * device){ swap_r(device, E); }
+void cb_0x34(Device * device){ swap_r(device, H); }
+void cb_0x35(Device * device){ swap_r(device, L); }
+void cb_0x36(Device * device){ swap_memrr(device, HL); }
+void cb_0x37(Device * device){ swap_r(device, A); }
+void cb_0x38(Device * device){ srl_r(device, B); }
+void cb_0x39(Device * device){ srl_r(device, C); }
+void cb_0x3a(Device * device){ srl_r(device, D); }
+void cb_0x3b(Device * device){ srl_r(device, E); }
+void cb_0x3c(Device * device){ srl_r(device, H); }
+void cb_0x3d(Device * device){ srl_r(device, L); }
+void cb_0x3e(Device * device){ srl_memrr(device, HL); }
+void cb_0x3f(Device * device){ srl_r(device, A); }
+void cb_0x40(Device * device){ bit_n_r(device, 0, B); }
+void cb_0x41(Device * device){ bit_n_r(device, 0, C); }
+void cb_0x42(Device * device){ bit_n_r(device, 0, D); }
+void cb_0x43(Device * device){ bit_n_r(device, 0, E); }
+void cb_0x44(Device * device){ bit_n_r(device, 0, H); }
+void cb_0x45(Device * device){ bit_n_r(device, 0, L); }
+void cb_0x46(Device * device){ bit_n_memrr(device, 0, HL); }
+void cb_0x47(Device * device){ bit_n_r(device, 0, A); }
+void cb_0x48(Device * device){ bit_n_r(device, 1, B); }
+void cb_0x49(Device * device){ bit_n_r(device, 1, C); }
+void cb_0x4a(Device * device){ bit_n_r(device, 1, D); }
+void cb_0x4b(Device * device){ bit_n_r(device, 1, E); }
+void cb_0x4c(Device * device){ bit_n_r(device, 1, H); }
+void cb_0x4d(Device * device){ bit_n_r(device, 1, L); }
+void cb_0x4e(Device * device){ bit_n_memrr(device, 1, HL); }
+void cb_0x4f(Device * device){ bit_n_r(device, 1, A); }
+void cb_0x50(Device * device){ bit_n_r(device, 2, B); }
+void cb_0x51(Device * device){ bit_n_r(device, 2, C); }
+void cb_0x52(Device * device){ bit_n_r(device, 2, D); }
+void cb_0x53(Device * device){ bit_n_r(device, 2, E); }
+void cb_0x54(Device * device){ bit_n_r(device, 2, H); }
+void cb_0x55(Device * device){ bit_n_r(device, 2, L); }
+void cb_0x56(Device * device){ bit_n_memrr(device, 2, HL); }
+void cb_0x57(Device * device){ bit_n_r(device, 2, A); }
+void cb_0x58(Device * device){ bit_n_r(device, 3, B); }
+void cb_0x59(Device * device){ bit_n_r(device, 3, C); }
+void cb_0x5a(Device * device){ bit_n_r(device, 3, D); }
+void cb_0x5b(Device * device){ bit_n_r(device, 3, E); }
+void cb_0x5c(Device * device){ bit_n_r(device, 3, H); }
+void cb_0x5d(Device * device){ bit_n_r(device, 3, L); }
+void cb_0x5e(Device * device){ bit_n_memrr(device, 3, HL); }
+void cb_0x5f(Device * device){ bit_n_r(device, 3, A); }
+void cb_0x60(Device * device){ bit_n_r(device, 4, B); }
+void cb_0x61(Device * device){ bit_n_r(device, 4, C); }
+void cb_0x62(Device * device){ bit_n_r(device, 4, D); }
+void cb_0x63(Device * device){ bit_n_r(device, 4, E); }
+void cb_0x64(Device * device){ bit_n_r(device, 4, H); }
+void cb_0x65(Device * device){ bit_n_r(device, 4, L); }
+void cb_0x66(Device * device){ bit_n_memrr(device, 4, HL); }
+void cb_0x67(Device * device){ bit_n_r(device, 4, A); }
+void cb_0x68(Device * device){ bit_n_r(device, 5, B); }
+void cb_0x69(Device * device){ bit_n_r(device, 5, C); }
+void cb_0x6a(Device * device){ bit_n_r(device, 5, D); }
+void cb_0x6b(Device * device){ bit_n_r(device, 5, E); }
+void cb_0x6c(Device * device){ bit_n_r(device, 5, H); }
+void cb_0x6d(Device * device){ bit_n_r(device, 5, L); }
+void cb_0x6e(Device * device){ bit_n_memrr(device, 5, HL); }
+void cb_0x6f(Device * device){ bit_n_r(device, 5, A); }
+void cb_0x70(Device * device){ bit_n_r(device, 6, B); }
+void cb_0x71(Device * device){ bit_n_r(device, 6, C); }
+void cb_0x72(Device * device){ bit_n_r(device, 6, D); }
+void cb_0x73(Device * device){ bit_n_r(device, 6, E); }
+void cb_0x74(Device * device){ bit_n_r(device, 6, H); }
+void cb_0x75(Device * device){ bit_n_r(device, 6, L); }
+void cb_0x76(Device * device){ bit_n_memrr(device, 6, HL); }
+void cb_0x77(Device * device){ bit_n_r(device, 6, A); }
+void cb_0x78(Device * device){ bit_n_r(device, 7, B); }
+void cb_0x79(Device * device){ bit_n_r(device, 7, C); }
+void cb_0x7a(Device * device){ bit_n_r(device, 7, D); }
+void cb_0x7b(Device * device){ bit_n_r(device, 7, E); }
+void cb_0x7c(Device * device){ bit_n_r(device, 7, H); }
+void cb_0x7d(Device * device){ bit_n_r(device, 7, L); }
+void cb_0x7e(Device * device){ bit_n_memrr(device, 7, HL); }
+void cb_0x7f(Device * device){ bit_n_r(device, 7, A); }
+void cb_0x80(Device * device){ res_n_r(device, 0, B); }
+void cb_0x81(Device * device){ res_n_r(device, 0, C); }
+void cb_0x82(Device * device){ res_n_r(device, 0, D); }
+void cb_0x83(Device * device){ res_n_r(device, 0, E); }
+void cb_0x84(Device * device){ res_n_r(device, 0, H); }
+void cb_0x85(Device * device){ res_n_r(device, 0, L); }
+void cb_0x86(Device * device){ res_n_memrr(device, 0, HL); }
+void cb_0x87(Device * device){ res_n_r(device, 0, A); }
+void cb_0x88(Device * device){ res_n_r(device, 1, B); }
+void cb_0x89(Device * device){ res_n_r(device, 1, C); }
+void cb_0x8a(Device * device){ res_n_r(device, 1, D); }
+void cb_0x8b(Device * device){ res_n_r(device, 1, E); }
+void cb_0x8c(Device * device){ res_n_r(device, 1, H); }
+void cb_0x8d(Device * device){ res_n_r(device, 1, L); }
+void cb_0x8e(Device * device){ res_n_memrr(device, 1, HL); }
+void cb_0x8f(Device * device){ res_n_r(device, 1, A); }
+void cb_0x90(Device * device){ res_n_r(device, 2, B); }
+void cb_0x91(Device * device){ res_n_r(device, 2, C); }
+void cb_0x92(Device * device){ res_n_r(device, 2, D); }
+void cb_0x93(Device * device){ res_n_r(device, 2, E); }
+void cb_0x94(Device * device){ res_n_r(device, 2, H); }
+void cb_0x95(Device * device){ res_n_r(device, 2, L); }
+void cb_0x96(Device * device){ res_n_memrr(device, 2, HL); }
+void cb_0x97(Device * device){ res_n_r(device, 2, A); }
+void cb_0x98(Device * device){ res_n_r(device, 3, B); }
+void cb_0x99(Device * device){ res_n_r(device, 3, C); }
+void cb_0x9a(Device * device){ res_n_r(device, 3, D); }
+void cb_0x9b(Device * device){ res_n_r(device, 3, E); }
+void cb_0x9c(Device * device){ res_n_r(device, 3, H); }
+void cb_0x9d(Device * device){ res_n_r(device, 3, L); }
+void cb_0x9e(Device * device){ res_n_memrr(device, 3, HL); }
+void cb_0x9f(Device * device){ res_n_r(device, 3, A); }
+void cb_0xa0(Device * device){ res_n_r(device, 4, B); }
+void cb_0xa1(Device * device){ res_n_r(device, 4, C); }
+void cb_0xa2(Device * device){ res_n_r(device, 4, D); }
+void cb_0xa3(Device * device){ res_n_r(device, 4, E); }
+void cb_0xa4(Device * device){ res_n_r(device, 4, H); }
+void cb_0xa5(Device * device){ res_n_r(device, 4, L); }
+void cb_0xa6(Device * device){ res_n_memrr(device, 4, HL); }
+void cb_0xa7(Device * device){ res_n_r(device, 4, A); }
+void cb_0xa8(Device * device){ res_n_r(device, 5, B); }
+void cb_0xa9(Device * device){ res_n_r(device, 5, C); }
+void cb_0xaa(Device * device){ res_n_r(device, 5, D); }
+void cb_0xab(Device * device){ res_n_r(device, 5, E); }
+void cb_0xac(Device * device){ res_n_r(device, 5, H); }
+void cb_0xad(Device * device){ res_n_r(device, 5, L); }
+void cb_0xae(Device * device){ res_n_memrr(device, 5, HL); }
+void cb_0xaf(Device * device){ res_n_r(device, 5, A); }
+void cb_0xb0(Device * device){ res_n_r(device, 6, B); }
+void cb_0xb1(Device * device){ res_n_r(device, 6, C); }
+void cb_0xb2(Device * device){ res_n_r(device, 6, D); }
+void cb_0xb3(Device * device){ res_n_r(device, 6, E); }
+void cb_0xb4(Device * device){ res_n_r(device, 6, H); }
+void cb_0xb5(Device * device){ res_n_r(device, 6, L); }
+void cb_0xb6(Device * device){ res_n_memrr(device, 6, HL); }
+void cb_0xb7(Device * device){ res_n_r(device, 6, A); }
+void cb_0xb8(Device * device){ res_n_r(device, 7, B); }
+void cb_0xb9(Device * device){ res_n_r(device, 7, C); }
+void cb_0xba(Device * device){ res_n_r(device, 7, D); }
+void cb_0xbb(Device * device){ res_n_r(device, 7, E); }
+void cb_0xbc(Device * device){ res_n_r(device, 7, H); }
+void cb_0xbd(Device * device){ res_n_r(device, 7, L); }
+void cb_0xbe(Device * device){ res_n_memrr(device, 7, HL); }
+void cb_0xbf(Device * device){ res_n_r(device, 7, A); }
+void cb_0xc0(Device * device){ set_n_r(device, 0, B); }
+void cb_0xc1(Device * device){ set_n_r(device, 0, C); }
+void cb_0xc2(Device * device){ set_n_r(device, 0, D); }
+void cb_0xc3(Device * device){ set_n_r(device, 0, E); }
+void cb_0xc4(Device * device){ set_n_r(device, 0, H); }
+void cb_0xc5(Device * device){ set_n_r(device, 0, L); }
+void cb_0xc6(Device * device){ set_n_memrr(device, 0, HL); }
+void cb_0xc7(Device * device){ set_n_r(device, 0, A); }
+void cb_0xc8(Device * device){ set_n_r(device, 1, B); }
+void cb_0xc9(Device * device){ set_n_r(device, 1, C); }
+void cb_0xca(Device * device){ set_n_r(device, 1, D); }
+void cb_0xcb(Device * device){ set_n_r(device, 1, E); }
+void cb_0xcc(Device * device){ set_n_r(device, 1, H); }
+void cb_0xcd(Device * device){ set_n_r(device, 1, L); }
+void cb_0xce(Device * device){ set_n_memrr(device, 1, HL); }
+void cb_0xcf(Device * device){ set_n_r(device, 1, A); }
+void cb_0xd0(Device * device){ set_n_r(device, 2, B); }
+void cb_0xd1(Device * device){ set_n_r(device, 2, C); }
+void cb_0xd2(Device * device){ set_n_r(device, 2, D); }
+void cb_0xd3(Device * device){ set_n_r(device, 2, E); }
+void cb_0xd4(Device * device){ set_n_r(device, 2, H); }
+void cb_0xd5(Device * device){ set_n_r(device, 2, L); }
+void cb_0xd6(Device * device){ set_n_memrr(device, 2, HL); }
+void cb_0xd7(Device * device){ set_n_r(device, 2, A); }
+void cb_0xd8(Device * device){ set_n_r(device, 3, B); }
+void cb_0xd9(Device * device){ set_n_r(device, 3, C); }
+void cb_0xda(Device * device){ set_n_r(device, 3, D); }
+void cb_0xdb(Device * device){ set_n_r(device, 3, E); }
+void cb_0xdc(Device * device){ set_n_r(device, 3, H); }
+void cb_0xdd(Device * device){ set_n_r(device, 3, L); }
+void cb_0xde(Device * device){ set_n_memrr(device, 3, HL); }
+void cb_0xdf(Device * device){ set_n_r(device, 3, A); }
+void cb_0xe0(Device * device){ set_n_r(device, 4, B); }
+void cb_0xe1(Device * device){ set_n_r(device, 4, C); }
+void cb_0xe2(Device * device){ set_n_r(device, 4, D); }
+void cb_0xe3(Device * device){ set_n_r(device, 4, E); }
+void cb_0xe4(Device * device){ set_n_r(device, 4, H); }
+void cb_0xe5(Device * device){ set_n_r(device, 4, L); }
+void cb_0xe6(Device * device){ set_n_memrr(device, 4, HL); }
+void cb_0xe7(Device * device){ set_n_r(device, 4, A); }
+void cb_0xe8(Device * device){ set_n_r(device, 5, B); }
+void cb_0xe9(Device * device){ set_n_r(device, 5, C); }
+void cb_0xea(Device * device){ set_n_r(device, 5, D); }
+void cb_0xeb(Device * device){ set_n_r(device, 5, E); }
+void cb_0xec(Device * device){ set_n_r(device, 5, H); }
+void cb_0xed(Device * device){ set_n_r(device, 5, L); }
+void cb_0xee(Device * device){ set_n_memrr(device, 5, HL); }
+void cb_0xef(Device * device){ set_n_r(device, 5, A); }
+void cb_0xf0(Device * device){ set_n_r(device, 6, B); }
+void cb_0xf1(Device * device){ set_n_r(device, 6, C); }
+void cb_0xf2(Device * device){ set_n_r(device, 6, D); }
+void cb_0xf3(Device * device){ set_n_r(device, 6, E); }
+void cb_0xf4(Device * device){ set_n_r(device, 6, H); }
+void cb_0xf5(Device * device){ set_n_r(device, 6, L); }
+void cb_0xf6(Device * device){ set_n_memrr(device, 6, HL); }
+void cb_0xf7(Device * device){ set_n_r(device, 6, A); }
+void cb_0xf8(Device * device){ set_n_r(device, 7, B); }
+void cb_0xf9(Device * device){ set_n_r(device, 7, C); }
+void cb_0xfa(Device * device){ set_n_r(device, 7, D); }
+void cb_0xfb(Device * device){ set_n_r(device, 7, E); }
+void cb_0xfc(Device * device){ set_n_r(device, 7, H); }
+void cb_0xfd(Device * device){ set_n_r(device, 7, L); }
+void cb_0xfe(Device * device){ set_n_memrr(device, 7, HL); }
+void cb_0xff(Device * device){ set_n_r(device, 7, A); }
+
+void setup_cb_instructions(Device * device){
+	void (* cb_instructions[0x100])(Device *) = {
+	&cb_0x00, &cb_0x01, &cb_0x02, &cb_0x03, &cb_0x04, &cb_0x05, &cb_0x06, &cb_0x07, &cb_0x08, &cb_0x09, &cb_0x0a, &cb_0x0b, &cb_0x0c, &cb_0x0d, &cb_0x0e, &cb_0x0f,
+	&cb_0x10, &cb_0x11, &cb_0x12, &cb_0x13, &cb_0x14, &cb_0x15, &cb_0x16, &cb_0x17, &cb_0x18, &cb_0x19, &cb_0x1a, &cb_0x1b, &cb_0x1c, &cb_0x1d, &cb_0x1e, &cb_0x1f,
+	&cb_0x20, &cb_0x21, &cb_0x22, &cb_0x23, &cb_0x24, &cb_0x25, &cb_0x26, &cb_0x27, &cb_0x28, &cb_0x29, &cb_0x2a, &cb_0x2b, &cb_0x2c, &cb_0x2d, &cb_0x2e, &cb_0x2f,
+ 	&cb_0x30, &cb_0x31, &cb_0x32, &cb_0x33, &cb_0x34, &cb_0x35, &cb_0x36, &cb_0x37, &cb_0x38, &cb_0x39, &cb_0x3a, &cb_0x3b, &cb_0x3c, &cb_0x3d, &cb_0x3e, &cb_0x3f,
+	&cb_0x40, &cb_0x41, &cb_0x42, &cb_0x43, &cb_0x44, &cb_0x45, &cb_0x46, &cb_0x47, &cb_0x48, &cb_0x49, &cb_0x4a, &cb_0x4b, &cb_0x4c, &cb_0x4d, &cb_0x4e, &cb_0x4f,
+ 	&cb_0x50, &cb_0x51, &cb_0x52, &cb_0x53, &cb_0x54, &cb_0x55, &cb_0x56, &cb_0x57, &cb_0x58, &cb_0x59, &cb_0x5a, &cb_0x5b, &cb_0x5c, &cb_0x5d, &cb_0x5e, &cb_0x5f, 
+	&cb_0x60, &cb_0x61, &cb_0x62, &cb_0x63, &cb_0x64, &cb_0x65, &cb_0x66, &cb_0x67, &cb_0x68, &cb_0x69, &cb_0x6a, &cb_0x6b, &cb_0x6c, &cb_0x6d, &cb_0x6e, &cb_0x6f, 
+	&cb_0x70, &cb_0x71, &cb_0x72, &cb_0x73, &cb_0x74, &cb_0x75, &cb_0x76, &cb_0x77, &cb_0x78, &cb_0x79, &cb_0x7a, &cb_0x7b, &cb_0x7c, &cb_0x7d, &cb_0x7e, &cb_0x7f, 
+	&cb_0x80, &cb_0x81, &cb_0x82, &cb_0x83, &cb_0x84, &cb_0x85, &cb_0x86, &cb_0x87, &cb_0x88, &cb_0x89, &cb_0x8a, &cb_0x8b, &cb_0x8c, &cb_0x8d, &cb_0x8e, &cb_0x8f, 
+	&cb_0x90, &cb_0x91, &cb_0x92, &cb_0x93, &cb_0x94, &cb_0x95, &cb_0x96, &cb_0x97, &cb_0x98, &cb_0x99, &cb_0x9a, &cb_0x9b, &cb_0x9c, &cb_0x9d, &cb_0x9e, &cb_0x9f, 
+	&cb_0xa0, &cb_0xa1, &cb_0xa2, &cb_0xa3, &cb_0xa4, &cb_0xa5, &cb_0xa6, &cb_0xa7, &cb_0xa8, &cb_0xa9, &cb_0xaa, &cb_0xab, &cb_0xac, &cb_0xad, &cb_0xae, &cb_0xaf, 
+	&cb_0xb0, &cb_0xb1, &cb_0xb2, &cb_0xb3, &cb_0xb4, &cb_0xb5, &cb_0xb6, &cb_0xb7, &cb_0xb8, &cb_0xb9, &cb_0xba, &cb_0xbb, &cb_0xbc, &cb_0xbd, &cb_0xbe, &cb_0xbf, 
+	&cb_0xc0, &cb_0xc1, &cb_0xc2, &cb_0xc3, &cb_0xc4, &cb_0xc5, &cb_0xc6, &cb_0xc7, &cb_0xc8, &cb_0xc9, &cb_0xca, &cb_0xcb, &cb_0xcc, &cb_0xcd, &cb_0xce, &cb_0xcf, 
+	&cb_0xd0, &cb_0xd1, &cb_0xd2, &cb_0xd3, &cb_0xd4, &cb_0xd5, &cb_0xd6, &cb_0xd7, &cb_0xd8, &cb_0xd9, &cb_0xda, &cb_0xdb, &cb_0xdc, &cb_0xdd, &cb_0xde, &cb_0xdf,
+	&cb_0xe0, &cb_0xe1, &cb_0xe2, &cb_0xe3, &cb_0xe4, &cb_0xe5, &cb_0xe6, &cb_0xe7, &cb_0xe8, &cb_0xe9, &cb_0xea, &cb_0xeb, &cb_0xec, &cb_0xed, &cb_0xee, &cb_0xef, 
+	&cb_0xf0, &cb_0xf1, &cb_0xf2, &cb_0xf3, &cb_0xf4, &cb_0xf5, &cb_0xf6, &cb_0xf7, &cb_0xf8, &cb_0xf9, &cb_0xfa, &cb_0xfb, &cb_0xfc, &cb_0xfd, &cb_0xfe, &cb_0xff
+	};
+	std::copy(cb_instructions, cb_instructions+0x100, device->cpu.cb_instructions);
 }
