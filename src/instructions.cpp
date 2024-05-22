@@ -65,12 +65,12 @@ void ld_mema16_sp(Device * device){
 
 void ld_memrri_r(Device * device, uint8_t _rr_in, uint8_t _r_out){
 	device->mmu.write(device->cpu.rr[_rr_in], device->cpu.r[_r_out]);
-	device->cpu.r[_r_out]++;
+	device->cpu.r[_rr_in]++;
 }
 
 void ld_memrrd_r(Device * device, uint8_t _rr_in, uint8_t _r_out){
 	device->mmu.write(device->cpu.rr[_rr_in], device->cpu.r[_r_out]);
-	device->cpu.r[_r_out]--;
+	device->cpu.r[_rr_in]--;
 }
 
 void ld_r_memrri(Device * device, uint8_t _r_in, uint8_t _rr_out){
