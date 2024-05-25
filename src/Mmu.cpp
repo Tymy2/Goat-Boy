@@ -7,6 +7,10 @@
 
 MMU::MMU(){
 	this->memory = (uint8_t *)malloc(0x10000);
+	//zero the memory to prevent unwanted values;
+	for(int i = 0; i < 0x10000; i++){
+		this->memory[i] = 0;
+	}
 }
 
 MMU::~MMU(){

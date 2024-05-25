@@ -24,5 +24,5 @@ void CPU::set_flags(uint8_t mask, uint8_t values){
 	mask <<= 4;
 	values <<= 4;
 	//								 <-----------error_fix------------->
-	this->r[0x1] = (flags & ~mask) | (values ^ (values & (mask ^ 0xF0)));
+	this->r[0x0] = (flags & ~mask) | (values ^ (values & (mask ^ 0xF0)));
 }

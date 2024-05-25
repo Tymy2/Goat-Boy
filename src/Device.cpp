@@ -20,13 +20,13 @@ void debug_print(Device * device){
 		printf("Op_code: %02x %2s ", op_code, "");
 	}
 	printf("Registers: [ A: %02x B: %02x C: %02x D: %02x E: %02x H: %02x L: %02x ] Flags: [ Z: %d N: %d H: %d C: %d ] PC: %04x SP: %04x\n", 
-		device->cpu.r[0x0],
-		device->cpu.r[0x2],
+		device->cpu.r[0x1],
 		device->cpu.r[0x3],
-		device->cpu.r[0x4],
+		device->cpu.r[0x2],
 		device->cpu.r[0x5],
-		device->cpu.r[0x6],
+		device->cpu.r[0x4],
 		device->cpu.r[0x7],
+		device->cpu.r[0x6],
 		flags >> 7,
 		(flags >> 6) & 0x1,
 		(flags >> 5) & 0x1,
@@ -39,4 +39,5 @@ void debug_print(Device * device){
 void Device::tick(){
 	if(this->debug_enabled) debug_print(this); 
 	this->cpu.decode_and_execute();
+	this->ppu.tick();
 }
