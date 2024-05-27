@@ -26,7 +26,7 @@ class PPU{
 			0x0f380f00
 		};
 		void draw_pixel(uint8_t, uint16_t, uint16_t);
-		void draw_tile(uint16_t, uint8_t, uint8_t);
+		void draw_tile(uint16_t, uint8_t, uint8_t, int8_t, int8_t);
 		void update_pixels();
 		void update_lcdc_variables();
 		void tick();

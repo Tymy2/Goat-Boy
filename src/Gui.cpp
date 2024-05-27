@@ -21,19 +21,17 @@ void GUI::handle_events(bool * keep_running){
 }
 
 void GUI::update_pixels(uint32_t * pixels){
-	SDL_RenderClear(this->renderer);
-	uint8_t r = 0;
-	uint8_t g = 0;
-	uint8_t b = 0;
+	uint32_t * pixelpointer = NULL;
+	int pitch = 4 * this->width;
+	SDL_Texture* buffer = SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, this->width, this->height);
+    SDL_LockTexture(buffer, NULL, (void * *) &pixelpointer, &pitch);
 	for(int y = 0; y < this->height; y++){
 		for(int x = 0; x < this->width; x++){
-			uint32_t pixel = *(pixels++);
-			r = pixel >> 24;
-			g = (pixel >> 16) & 0xff;
-			b = (pixel >> 8) & 0xff;
-			SDL_SetRenderDrawColor(this->renderer, r, g, b, 0xff);
-			SDL_RenderDrawPoint(this->renderer, x, y);
+			*(pixelpointer++) = *(pixels++);
 		}
 	}
-	SDL_RenderPresent(this->renderer);
+	SDL_UnlockTexture(buffer);
+	SDL_RenderClear(this->renderer);
+ 	SDL_RenderCopy(this->renderer, buffer, NULL, NULL);
+  	SDL_RenderPresent(this->renderer);
 }

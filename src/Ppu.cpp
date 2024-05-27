@@ -33,16 +33,24 @@ void PPU::draw_pixel(uint8_t pixel_value, uint16_t x, uint16_t y){
 	this->pixels[x + (y * SCREEN_WIDTH)] = this->colors[pixel_value];
 }
 
-void PPU::draw_tile(uint16_t tile_index, uint8_t tile_x, uint8_t tile_y){
+void PPU::draw_tile(uint16_t tile_index, uint8_t tile_x, uint8_t tile_y, int8_t offset_x, int8_t offset_y){
     uint16_t tile_addr = this->tiledata_addr + (tile_index * TILE_SIZE);
-    uint16_t pixel_x = uint16_t(tile_x) * 8;
-    uint16_t pixel_y = uint16_t(tile_y) * 8;
-    for(uint8_t i = 0; i < TILE_SIZE; i+=2){
-        uint8_t byte_1 = this->memory[tile_addr + i];
+    uint16_t pixel_x = (uint16_t(tile_x) * 8) + offset_x;
+    uint16_t pixel_y = (uint16_t(tile_y) * 8) + offset_y;
+    for(uint8_t i = (offset_y*8); i < TILE_SIZE; i+=2){
+		uint16_t y_coord_pixel = pixel_y + (i/2);
+		if(y_coord_pixel >= 144){
+			break;
+		}
+		uint8_t byte_1 = this->memory[tile_addr + i];
         uint8_t byte_2 = this->memory[tile_addr + i + 1];
-        for(int8_t bit_pos = 7; bit_pos >= 0; bit_pos--){
+        for(int8_t bit_pos = 7; bit_pos >= offset_x; bit_pos--){
+			uint16_t x_coord_pixel = pixel_x + (7-bit_pos);
+			if(x_coord_pixel >= 160){
+				break;
+			}
             uint8_t pixel_value = (((byte_2 >> bit_pos) & 1) << 1) + ((byte_1 >> bit_pos) & 1);
-            this->draw_pixel(pixel_value, pixel_x + (7-bit_pos), pixel_y + (i/2));
+            this->draw_pixel(pixel_value, x_coord_pixel, y_coord_pixel);
         }
     }
 }
@@ -50,16 +58,20 @@ void PPU::draw_tile(uint16_t tile_index, uint8_t tile_x, uint8_t tile_y){
 void PPU::update_pixels(){
 	uint8_t SCX = this->memory[SCX_ADDR];
 	uint8_t SCY = this->memory[SCY_ADDR];
-    for(uint16_t i = 0; i < 360; i++){
+	uint8_t tile_start_x = SCX/8;
+	uint8_t tile_start_y = SCY/8;
+	int8_t offset_x = SCX - (tile_start_x * 8);
+	int8_t offset_y = SCY - (tile_start_y * 8);
+    for(uint16_t i = 0; i < 440; i++){
         uint8_t screen_x = i%20;
         uint8_t screen_y = i/20;
 
-        uint16_t t_tile_x = ((SCX + screen_x) % 32);
-        uint16_t t_tile_y = (((SCY/8) + screen_y) % 32) * 32;
+        uint16_t tilemap_x = ((tile_start_x + screen_x) % 32);
+        uint16_t tilemap_y = ((tile_start_y + screen_y) % 32);
 
-        uint16_t tile_map_index = t_tile_x + t_tile_y;
+        uint16_t tile_map_index = tilemap_x + (tilemap_y * 32);
         uint16_t tile_index = this->memory[this->tilemap_addr + tile_map_index];
-		this->draw_tile(tile_index, screen_x, screen_y);
+		this->draw_tile(tile_index, screen_x, screen_y, offset_x, offset_y);
     }
 }
 
