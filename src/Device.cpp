@@ -10,7 +10,7 @@ void Device::init(){
 
 // TODO change implementation, it is really bad to output to console, speed goes really down
 void debug_print(Device * device){
-	uint8_t flags = device->cpu.r[0x1];
+	uint8_t flags = device->cpu.r[0x0];
 	uint8_t op_code = device->mmu.read(device->cpu.pc);
 	uint8_t cb_code = device->mmu.read(device->cpu.pc+1);
 	
