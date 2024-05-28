@@ -34,4 +34,5 @@ void GUI::update_pixels(uint32_t * pixels){
 	SDL_RenderClear(this->renderer);
  	SDL_RenderCopy(this->renderer, buffer, NULL, NULL);
   	SDL_RenderPresent(this->renderer);
+	SDL_DestroyTexture(buffer);
 }
