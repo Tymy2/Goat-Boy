@@ -1,5 +1,5 @@
-#include "Gui.h"
-#include "Device.h"
+#include "headers/Gui.h"
+#include "headers/Device.h"
 #include <SDL2/SDL.h>
 #include <iostream>
 

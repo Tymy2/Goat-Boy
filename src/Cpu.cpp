@@ -1,6 +1,6 @@
-#include "Cpu.h"
+#include "headers/Cpu.h"
 #include <stdint.h>
-#include "Device.h"
+#include "headers/Device.h"
 #include <iostream>
 
 uint8_t CPU::fetch(){

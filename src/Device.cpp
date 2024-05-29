@@ -1,5 +1,5 @@
-#include "Device.h"
-#include "instructions.h"
+#include "headers/Device.h"
+#include "headers/instructions.h"
 #include <iostream>
 
 void Device::init(){

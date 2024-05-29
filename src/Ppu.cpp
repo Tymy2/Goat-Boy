@@ -1,4 +1,4 @@
-#include "ppu.h"
+#include "headers/ppu.h"
 #include <cstdlib>
 #include <iostream>
 #include <stdlib.h>

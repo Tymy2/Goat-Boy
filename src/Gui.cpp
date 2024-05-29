@@ -1,5 +1,5 @@
 #include <SDL2/SDL.h>
-#include "Gui.h"
+#include "headers/Gui.h"
 #include <iostream>
 
 void GUI::init(){

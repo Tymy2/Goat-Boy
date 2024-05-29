@@ -1,5 +1,5 @@
-#include "instructions.h"
-#include "Device.h"
+#include "headers/instructions.h"
+#include "headers/Device.h"
 #include <iostream>
 
 const uint8_t A=0x1;
