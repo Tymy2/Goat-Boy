@@ -5,15 +5,21 @@
 #include <vector>
 #include <fstream>
 
+void dump_mem(uint8_t * memory){
+	std::ofstream out;
+	out.open("dump.mem");
+	for(int i = 0; i < 0x10000; i++){
+		out << memory[i];
+	}
+	out.close();
+}
+
 MMU::MMU(){
 	this->memory = (uint8_t *)malloc(0x10000);
-	//zero the memory to prevent unwanted values;
-	for(int i = 0; i < 0x10000; i++){
-		this->memory[i] = 0;
-	}
 }
 
 MMU::~MMU(){
+	//dump_mem(this->memory);
 	free(this->memory);
 }
 

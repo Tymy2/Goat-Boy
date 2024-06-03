@@ -39,5 +39,5 @@ void debug_print(Device * device){
 void Device::tick(){
 	if(this->debug_enabled) debug_print(this); 
 	this->cpu.decode_and_execute();
-	this->ppu.tick();
+	this->ppu.tick(this->cpu.index_cycles);
 }

@@ -1,4 +1,5 @@
 #include "headers/ppu.h"
+#include "headers/cycles.h"
 #include <cstdlib>
 #include <iostream>
 #include <stdlib.h>
@@ -35,12 +36,12 @@ void PPU::draw_pixel(uint8_t pixel_value, uint16_t x, uint16_t y){
 
 void PPU::draw_tile(uint16_t tile_index, uint8_t tile_x, uint8_t tile_y, int8_t offset_x, int8_t offset_y){
     uint16_t tile_addr = this->tiledata_addr + (tile_index * TILE_SIZE);
-    uint16_t pixel_x = (uint16_t(tile_x) * 8) + offset_x;
-    uint16_t pixel_y = (uint16_t(tile_y) * 8) + offset_y;
-    for(uint8_t i = (offset_y*8); i < TILE_SIZE; i+=2){
+    uint16_t pixel_x = (uint16_t(tile_x) * 8) - offset_x;
+    uint16_t pixel_y = (uint16_t(tile_y) * 8) - offset_y;
+    for(uint8_t i = 0; i < TILE_SIZE; i+=2){
 		uint16_t y_coord_pixel = pixel_y + (i/2);
 		if(y_coord_pixel >= 144){
-			break;
+			continue;
 		}
 		uint8_t byte_1 = this->memory[tile_addr + i];
         uint8_t byte_2 = this->memory[tile_addr + i + 1];
@@ -104,17 +105,21 @@ void PPU::update_lcdc_variables(){
 	this->priority = lcdc & LCDC_PPU_ENABLED_BIT;
 }
 
-void PPU::tick(){
-	if(this->clock < 100){
-		this->clock++;
-		return;
-	}
-	this->clock = 0;
-	this->memory[LY_ADDR] = 0x90; //testing only, should remove. indicates vblank period
-								  
-	this->update_lcdc_variables();
+void PPU::tick(uint16_t cpu_cycles_index){
+	this->clock += CYCLES[cpu_cycles_index];
+											
+	uint8_t scanline = (this->clock / 4) / 456;
+	
+	this->memory[LY_ADDR] = scanline;
+	
+	if(scanline >= 154){
+		this->clock = 0;
+		this->memory[LY_ADDR] = 0;
+		this->update_lcdc_variables();
 
-	if(this->is_enabled){
-		this->update_pixels();
+		if(this->is_enabled){
+			this->update_pixels();
+		}
+
 	}
 }

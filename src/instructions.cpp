@@ -2,20 +2,23 @@
 #include "headers/Device.h"
 #include <iostream>
 
-const uint8_t A=0x1;
-const uint8_t F=0x0;
-const uint8_t B=0x3;
-const uint8_t C=0x2;
-const uint8_t D=0x5;
-const uint8_t E=0x4;
-const uint8_t H=0x7;
-const uint8_t L=0x6;
-const uint8_t AF=0x0;
-const uint8_t BC=0x1;
-const uint8_t DE=0x2;
-const uint8_t HL=0x3;
+#define H_SUM 1
+#define H_SUB -1
 
-bool calc_z(int a){
+#define A 1
+#define F 0
+#define B 3
+#define C 2
+#define D 5
+#define E 4
+#define H 7
+#define L 6
+#define AF 0
+#define BC 1
+#define DE 2
+#define HL 3
+
+bool calc_z(uint64_t a){
 	return a == 0x0;
 }
 
@@ -27,12 +30,13 @@ bool calc_c16(uint32_t a){
 	return a > 0xffff;
 }
 
-bool calc_h8(uint8_t a, uint8_t b){
-	return (((a & 0xf) + (b & 0xf)) & 0x10) == 0x10; 
+//sign indicates if it is addtition or substraction (1 or -1)
+bool calc_h8(uint8_t a, uint8_t b, int8_t sign){
+	return (((a & 0xf) + ( sign * (b & 0xf))) & 0x10) == 0x10; 
 }
 
-bool calc_h16(uint16_t a, uint16_t b){
-	return (((a & 0xfff) + (b & 0xfff)) & 0x1000) == 0x1000;
+bool calc_h16(uint16_t a, uint16_t b, int8_t sign){
+	return (((a & 0xfff) + ( sign * (b & 0xfff))) & 0x1000) == 0x1000;
 }
 
 void halt(Device * device){
@@ -100,13 +104,11 @@ void ldh_r_mema8(Device * device, uint8_t _r_in){
 }
 
 void ld_memc_r(Device * device, uint8_t _r_out){
-	bool c = (device->cpu.r[F] >> 4) & 0x1;
-	device->mmu.write(0xff00 + c, device->cpu.r[_r_out]);
+	device->mmu.write(0xff00 + device->cpu.r[C], device->cpu.r[_r_out]);
 }
 
 void ld_r_memc(Device * device, uint8_t _r_in){
-	bool c = (device->cpu.r[F] >> 4) & 0x1;
-	device->cpu.r[_r_in] = device->mmu.read(0xff00+c);
+	device->cpu.r[_r_in] = device->mmu.read(0xff00+device->cpu.r[C]);
 }
 
 void ld_mema16_r(Device * device, uint8_t _r_out){
@@ -120,7 +122,7 @@ void ld_r_mema16(Device * device, uint8_t _r_in){
 void ld_rr_spr8(Device * device, uint8_t _rr_in){
 	int8_t addr_value = device->cpu.fetch();
 	int sum = device->cpu.sp + addr_value;
-	bool h = calc_h16(device->cpu.sp, addr_value);
+	bool h = calc_h16(device->cpu.sp, addr_value, addr_value < 0 ? H_SUB : H_SUM );
 	bool c = calc_c16(sum);
 	device->cpu.rr[_rr_in] = sum;
 	device->cpu.set_flags(0b1111, (h << 1) + c);
@@ -133,7 +135,7 @@ void ld_sp_rr(Device * device, uint8_t _rr_out){
 void add_rr_rr(Device * device, uint8_t _rr_left, uint8_t _rr_right){
 	uint32_t value_l = device->cpu.rr[_rr_left];
 	uint32_t value_r = device->cpu.rr[_rr_right];
-	bool h = calc_h16(value_l, value_r);
+	bool h = calc_h16(value_l, value_r, H_SUM);
 	value_l += value_r;
 	bool c = calc_c16(value_l);
 	device->cpu.rr[_rr_left] = value_l;
@@ -142,7 +144,7 @@ void add_rr_rr(Device * device, uint8_t _rr_left, uint8_t _rr_right){
 
 void add_rr_sp(Device * device, uint8_t _rr_in){
 	uint32_t value_l = device->cpu.rr[_rr_in];
-	bool h = calc_h16(value_l, device->cpu.sp);
+	bool h = calc_h16(value_l, device->cpu.sp, H_SUM);
 	value_l += device->cpu.sp;
 	bool c = calc_c16(value_l);
 	device->cpu.rr[_rr_in] = value_l;
@@ -150,7 +152,7 @@ void add_rr_sp(Device * device, uint8_t _rr_in){
 }
 
 void add_r_r(Device * device, uint8_t _r_in, uint8_t _r_out){
-	bool h = calc_h8(device->cpu.r[_r_in], device->cpu.r[_r_out]);
+	bool h = calc_h8(device->cpu.r[_r_in], device->cpu.r[_r_out], H_SUM);
 	uint16_t sum = device->cpu.r[_r_in];
 	sum += device->cpu.r[_r_out];
 	device->cpu.r[_r_in] = uint8_t(sum);
@@ -161,7 +163,7 @@ void add_r_r(Device * device, uint8_t _r_in, uint8_t _r_out){
 
 void add_r_memrr(Device * device, uint8_t _r_in, uint8_t _rr_out){
 	uint8_t memrr = device->mmu.read(device->cpu.rr[_rr_out]);
-	bool h = calc_h8(device->cpu.r[_r_in], memrr);
+	bool h = calc_h8(device->cpu.r[_r_in], memrr, H_SUM);
 	uint16_t sum = device->cpu.r[_r_in];
 	sum += memrr;
 	device->cpu.r[_r_in] = uint8_t(sum);
@@ -172,7 +174,7 @@ void add_r_memrr(Device * device, uint8_t _r_in, uint8_t _rr_out){
 
 void add_r_d8(Device * device, uint8_t _r_in){
 	uint8_t addr_val = device->cpu.fetch();
-	bool h = calc_h8(device->cpu.r[_r_in], addr_val);
+	bool h = calc_h8(device->cpu.r[_r_in], addr_val, H_SUM);
 	uint16_t sum = device->cpu.r[_r_in];
 	sum += addr_val;
 	device->cpu.r[_r_in] = uint8_t(sum);
@@ -183,18 +185,17 @@ void add_r_d8(Device * device, uint8_t _r_in){
 
 void add_sp_r8(Device * device){
 	int8_t addr_val = int8_t(device->cpu.fetch());
-	bool h = calc_h16(device->cpu.sp, addr_val);
+	bool h = calc_h16(device->cpu.sp, addr_val, addr_val < 0 ? H_SUB : H_SUM);
 	uint32_t sum = device->cpu.sp;
 	sum += addr_val;
-	device->cpu.sp = uint16_t(sum);
-	bool z = calc_z(device->cpu.sp);
+	device->cpu.sp = uint16_t(sum);	
 	bool c = calc_c16(sum);
 	device->cpu.set_flags(0b1111, (h << 1) + c );
 }
 
 void adc_r_r(Device * device, uint8_t _r_in, uint8_t _r_out){
 	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
-	bool h = calc_h8(device->cpu.r[_r_in], device->cpu.r[_r_out] + c_s);
+	bool h = calc_h8(device->cpu.r[_r_in], device->cpu.r[_r_out] + c_s, H_SUM);
 	uint16_t sum = device->cpu.r[_r_in];
 	sum += device->cpu.r[_r_out] + c_s;
 	device->cpu.r[_r_in] = uint8_t(sum);
@@ -206,7 +207,7 @@ void adc_r_r(Device * device, uint8_t _r_in, uint8_t _r_out){
 void adc_r_memrr(Device * device, uint8_t _r_in, uint8_t _rr_out){
 	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
 	uint16_t rr = device->cpu.rr[_rr_out];
-	bool h = calc_h8(device->cpu.r[_r_in], device->mmu.read(rr) + c_s);
+	bool h = calc_h8(device->cpu.r[_r_in], device->mmu.read(rr) + c_s, H_SUM);
 	uint16_t sum = device->cpu.r[_r_in];
 	sum += device->mmu.read(_rr_out) + c_s;
 	device->cpu.r[_r_in] = uint8_t(sum);
@@ -218,7 +219,7 @@ void adc_r_memrr(Device * device, uint8_t _r_in, uint8_t _rr_out){
 void adc_r_d8(Device * device, uint8_t _r_in){
 	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
 	uint8_t addr_val = device->cpu.fetch();
-	bool h = calc_h8(device->cpu.r[_r_in], addr_val + c_s);
+	bool h = calc_h8(device->cpu.r[_r_in], addr_val + c_s, H_SUM);
 	uint16_t sum = device->cpu.r[_r_in];
 	sum += addr_val + c_s;
 	device->cpu.r[_r_in] = uint8_t(sum);
@@ -231,7 +232,7 @@ void sub_r(Device * device, uint8_t _r_in){
 	uint16_t res = device->cpu.r[A];
 	res -= device->cpu.r[_r_in];
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[A], device->cpu.r[_r_in]);
+	bool h = calc_h8(device->cpu.r[A], device->cpu.r[_r_in], H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.r[A] = uint8_t(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
@@ -242,7 +243,7 @@ void sub_memrr(Device * device, uint8_t _rr_out){
 	uint16_t res = device->cpu.r[A];
 	res -= device->mmu.read(rr);
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[A], device->mmu.read(rr));
+	bool h = calc_h8(device->cpu.r[A], device->mmu.read(rr), H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.r[A] = uint8_t(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
@@ -253,7 +254,7 @@ void sub_r_d8(Device * device, uint8_t _r_in){
 	uint16_t res = device->cpu.r[_r_in];
 	res -= addr_val;
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[_r_in], addr_val);
+	bool h = calc_h8(device->cpu.r[_r_in], addr_val, H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.r[_r_in] = uint8_t(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
@@ -264,7 +265,7 @@ void sbc_r_r(Device * device, uint8_t _r_in, uint8_t _r_out){
 	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
 	res -= device->cpu.r[_r_out] + c_s;
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[_r_in], device->cpu.r[_r_out]+c_s);
+	bool h = calc_h8(device->cpu.r[_r_in], device->cpu.r[_r_out]+c_s, H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.r[_r_in] = uint8_t(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
@@ -276,7 +277,7 @@ void sbc_r_d8(Device * device, uint8_t _r_in){
 	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
 	res -= addr_val + c_s;
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[_r_in], addr_val+c_s);
+	bool h = calc_h8(device->cpu.r[_r_in], addr_val+c_s, H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.r[_r_in] = uint8_t(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
@@ -288,7 +289,7 @@ void sbc_r_memrr(Device * device, uint8_t _r_in, uint8_t _rr_out){
 	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
 	res -= device->mmu.read(rr) + c_s;
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[_r_in], device->mmu.read(rr)+c_s);
+	bool h = calc_h8(device->cpu.r[_r_in], device->mmu.read(rr)+c_s, H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.r[_r_in] = uint8_t(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
@@ -301,7 +302,7 @@ void inc_rr(Device * device, uint8_t _rr_in){
 void inc_memrr(Device * device, uint8_t _rr_out){
 	uint16_t addr = device->cpu.rr[_rr_out];
 	uint8_t value = device->mmu.read(addr);
-	bool h = calc_h8(value, value+1);
+	bool h = calc_h8(value, 1, H_SUM);
 	value++;
 	bool z = calc_z(value);
 	device->mmu.write(addr, value);
@@ -319,7 +320,7 @@ void dec_rr(Device * device, uint8_t _rr_in){
 void dec_memrr(Device * device, uint8_t _rr_in){
 	uint16_t addr = device->cpu.rr[_rr_in];
 	uint8_t addr_value = device->mmu.read(addr);
-	bool h = calc_h8(addr_value, addr_value-1);
+	bool h = calc_h8(addr_value, 1, H_SUB);
 	addr_value--;
 	device->mmu.write(addr, addr_value);
 	bool z = calc_z(addr_value);
@@ -329,7 +330,7 @@ void dec_memrr(Device * device, uint8_t _rr_in){
 void inc_r(Device * device, uint8_t _r_in){
 	device->cpu.r[_r_in]++;
 	bool z = calc_z(device->cpu.r[_r_in]);
-	bool h = calc_h8(device->cpu.r[_r_in], device->cpu.r[_r_in]-0x1);
+	bool h = calc_h8(device->cpu.r[_r_in], 1, H_SUM);
 	device->cpu.set_flags(0b1110, (z << 3)+(h << 1));
 }
 
@@ -338,7 +339,7 @@ void dec_sp(Device * device){
 }
 
 void dec_r(Device * device, uint8_t _r_in){
-	bool h = calc_h8(device->cpu.r[_r_in]-0x1, device->cpu.r[_r_in]);
+	bool h = calc_h8(device->cpu.r[_r_in], 1, H_SUB);
 	device->cpu.r[_r_in]--;
 	bool z = calc_z(device->cpu.r[_r_in]);
 	device->cpu.set_flags(0b1110, (z << 3)+(0x1 << 2)+(h << 1));
@@ -477,7 +478,7 @@ void cp_r(Device * device, uint8_t _r_out){
 	uint16_t res = device->cpu.r[A];
 	res -= device->cpu.r[_r_out];
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[A], device->cpu.r[_r_out]);
+	bool h = calc_h8(device->cpu.r[A], device->cpu.r[_r_out], H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
 }
@@ -487,7 +488,7 @@ void cp_memrr(Device * device, uint8_t _rr_out){
 	uint16_t res = device->cpu.r[A];
 	res -= device->mmu.read(rr);
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[A], device->mmu.read(rr));
+	bool h = calc_h8(device->cpu.r[A], device->mmu.read(rr), H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
 }
@@ -497,7 +498,7 @@ void cp_d8(Device * device){
 	uint16_t res = device->cpu.r[A];
 	res -= addr_val;
 	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[A], addr_val);
+	bool h = calc_h8(device->cpu.r[A], addr_val, H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
 }
@@ -618,7 +619,7 @@ void call_c_a16(Device * device){
 }
 
 void call_a16(Device * device){
-	int16_t n_pc = device->cpu.fetch_16();
+	uint16_t n_pc = device->cpu.fetch_16();
 	device->cpu.sp -= 2;
 	device->mmu.write_16(device->cpu.sp, device->cpu.pc);
 	device->cpu.pc = n_pc;
@@ -637,6 +638,7 @@ void rst(Device * device, uint8_t addr){
 
 void prefix_cb(Device * device){
 	uint8_t cb_op = device->cpu.fetch();
+	device->cpu.index_cycles = 0x100 + cb_op;
 	(* device->cpu.cb_instructions[cb_op])(device);
 }
 

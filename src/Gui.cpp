@@ -2,7 +2,8 @@
 #include "headers/Gui.h"
 #include <iostream>
 
-void GUI::init(){
+
+GUI::GUI(){
 	if(SDL_Init(SDL_INIT_EVERYTHING) < 0){
 		return;
 	}
@@ -10,6 +11,10 @@ void GUI::init(){
 	this->renderer = SDL_CreateRenderer(this->window, -1, 0);
 			
 	SDL_RenderSetLogicalSize(this->renderer, this->width, this->height);
+}
+
+GUI::~GUI(){
+	SDL_DestroyTexture(this->texture);
 }
 
 void GUI::handle_events(bool * keep_running){
@@ -21,18 +26,15 @@ void GUI::handle_events(bool * keep_running){
 }
 
 void GUI::update_pixels(uint32_t * pixels){
-	uint32_t * pixelpointer = NULL;
-	int pitch = 4 * this->width;
-	SDL_Texture* buffer = SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, this->width, this->height);
-    SDL_LockTexture(buffer, NULL, (void * *) &pixelpointer, &pitch);
+	this->texture = SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, this->width, this->height);
+    SDL_LockTexture(this->texture, NULL, (void * *) &this->pixelpointer, &this->pitch);
 	for(int y = 0; y < this->height; y++){
 		for(int x = 0; x < this->width; x++){
-			*(pixelpointer++) = *(pixels++);
+			*(this->pixelpointer++) = *(pixels++);
 		}
 	}
-	SDL_UnlockTexture(buffer);
+	SDL_UnlockTexture(this->texture);
 	SDL_RenderClear(this->renderer);
- 	SDL_RenderCopy(this->renderer, buffer, NULL, NULL);
+ 	SDL_RenderCopy(this->renderer, this->texture, NULL, NULL);
   	SDL_RenderPresent(this->renderer);
-	SDL_DestroyTexture(buffer);
 }

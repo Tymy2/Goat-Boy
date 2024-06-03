@@ -29,6 +29,6 @@ class PPU{
 		void draw_tile(uint16_t, uint8_t, uint8_t, int8_t, int8_t);
 		void update_pixels();
 		void update_lcdc_variables();
-		void tick();
+		void tick(uint16_t);
 };
 #endif
