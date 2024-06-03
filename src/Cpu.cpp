@@ -16,11 +16,13 @@ uint16_t CPU::fetch_16(){
 }
 
 void CPU::decode_and_execute(){
-	(* this->instructions[this->fetch()])(this->device);
+	uint8_t op_code = this->fetch();
+	this->index_cycles = op_code;
+	(* this->instructions[op_code])(this->device);
 }
 
 void CPU::set_flags(uint8_t mask, uint8_t values){
-	uint8_t flags = this->r[0x1];
+	uint8_t flags = this->r[0x0];
 	mask <<= 4;
 	values <<= 4;
 	//								 <-----------error_fix------------->

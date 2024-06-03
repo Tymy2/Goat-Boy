@@ -14,6 +14,7 @@ class CPU {
 		uint16_t sp = 0x0;
 		void (* instructions[0x100])(Device *) = {};
 		void (* cb_instructions[0x100])(Device *) = {};
+		uint16_t index_cycles = 0; // used to get bot cpu cycles and ppu dots
 		Device * device = NULL;
 
 		uint8_t fetch();
