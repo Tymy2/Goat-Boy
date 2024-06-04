@@ -11,6 +11,7 @@ GUI::GUI(){
 	this->renderer = SDL_CreateRenderer(this->window, -1, 0);
 			
 	SDL_RenderSetLogicalSize(this->renderer, this->width, this->height);
+ 	this->texture = SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, this->width, this->height);
 }
 
 GUI::~GUI(){
@@ -26,7 +27,6 @@ void GUI::handle_events(bool * keep_running){
 }
 
 void GUI::update_pixels(uint32_t * pixels){
-	this->texture = SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, this->width, this->height);
     SDL_LockTexture(this->texture, NULL, (void * *) &this->pixelpointer, &this->pitch);
 	for(int y = 0; y < this->height; y++){
 		for(int x = 0; x < this->width; x++){

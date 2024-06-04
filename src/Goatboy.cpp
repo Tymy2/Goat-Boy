@@ -62,7 +62,7 @@ public:
 				this->device.tick();
 			}
 			this->gui.handle_events(&this->keep_running);
-			if(this->device.ppu.clock == 0){
+			if(this->device.ppu.clock == 0 && this->device.ppu.is_enabled){
 				this->gui.update_pixels(this->device.ppu.pixels);
 			}
 		}

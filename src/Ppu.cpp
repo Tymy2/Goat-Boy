@@ -5,7 +5,9 @@
 #include <stdlib.h>
 
 #define LCDC_ADDR 0xff40
+#define STAT_ADDR 0xff41
 #define LY_ADDR 0xff44
+#define LYC_ADDR 0xff41
 #define SCY_ADDR 0xff42
 #define SCX_ADDR 0xff43
 #define SCREEN_WIDTH 160
@@ -107,11 +109,11 @@ void PPU::update_lcdc_variables(){
 
 void PPU::tick(uint16_t cpu_cycles_index){
 	this->clock += CYCLES[cpu_cycles_index];
-											
 	uint8_t scanline = (this->clock / 4) / 456;
-	
 	this->memory[LY_ADDR] = scanline;
-	
+
+	this->memory[STAT_ADDR] |= (scanline == this->memory[LYC_ADDR]) << 2;
+
 	if(scanline >= 154){
 		this->clock = 0;
 		this->memory[LY_ADDR] = 0;
