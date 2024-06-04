@@ -18,26 +18,13 @@
 #define DE 2
 #define HL 3
 
-bool calc_z(uint64_t a){
-	return a == 0x0;
-}
-
-bool calc_c8(uint16_t a){
-	return a > 0xff;
-}
-
-bool calc_c16(uint32_t a){
-	return a > 0xffff;
-}
+#define calc_z(a) (a == 0x0)
+#define calc_c8(a) (a > 0xff)
+#define calc_c16(a) (a > 0xffff)
 
 //sign indicates if it is addtition or substraction (1 or -1)
-bool calc_h8(uint8_t a, uint8_t b, int8_t sign){
-	return (((a & 0xf) + ( sign * (b & 0xf))) & 0x10) == 0x10; 
-}
-
-bool calc_h16(uint16_t a, uint16_t b, int8_t sign){
-	return (((a & 0xfff) + ( sign * (b & 0xfff))) & 0x1000) == 0x1000;
-}
+#define calc_h8(a,b,sign) ((((a & 0xf) + ( sign * (b & 0xf))) & 0x10) == 0x10)
+#define calc_h16(a,b,sign) ((((a & 0xfff) + ( sign * (b & 0xfff))) & 0x1000) == 0x1000)
 
 void halt(Device * device){
 	std::cout << "HALT INSTRUCTION CALLED, NOT IMPLEMENTED YET" << std::endl;
@@ -120,8 +107,8 @@ void ld_r_mema16(Device * device, uint8_t _r_in){
 }
 
 void ld_rr_spr8(Device * device, uint8_t _rr_in){
-	int8_t addr_value = device->cpu.fetch();
-	int sum = device->cpu.sp + addr_value;
+	int8_t addr_value = int8_t(device->cpu.fetch());
+	uint32_t sum = (device->cpu.sp + addr_value) & 0x1ffff;
 	bool h = calc_h16(device->cpu.sp, addr_value, addr_value < 0 ? H_SUB : H_SUM );
 	bool c = calc_c16(sum);
 	device->cpu.rr[_rr_in] = sum;
@@ -185,11 +172,11 @@ void add_r_d8(Device * device, uint8_t _r_in){
 
 void add_sp_r8(Device * device){
 	int8_t addr_val = int8_t(device->cpu.fetch());
-	bool h = calc_h16(device->cpu.sp, addr_val, addr_val < 0 ? H_SUB : H_SUM);
+	bool h = calc_h16(device->cpu.sp, uint16_t(addr_val), addr_val < 0 ? H_SUB : H_SUM);
 	uint32_t sum = device->cpu.sp;
 	sum += addr_val;
-	device->cpu.sp = uint16_t(sum);	
 	bool c = calc_c16(sum);
+	device->cpu.sp = uint16_t(sum);
 	device->cpu.set_flags(0b1111, (h << 1) + c );
 }
 
@@ -205,27 +192,37 @@ void adc_r_r(Device * device, uint8_t _r_in, uint8_t _r_out){
 }
 
 void adc_r_memrr(Device * device, uint8_t _r_in, uint8_t _rr_out){
-	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
-	uint16_t rr = device->cpu.rr[_rr_out];
-	bool h = calc_h8(device->cpu.r[_r_in], device->mmu.read(rr) + c_s, H_SUM);
-	uint16_t sum = device->cpu.r[_r_in];
-	sum += device->mmu.read(_rr_out) + c_s;
-	device->cpu.r[_r_in] = uint8_t(sum);
-	bool z = calc_z(device->cpu.r[_r_in]);
-	bool c = calc_c8(sum);
-	device->cpu.set_flags(0b1111, (z << 3) + (h << 1) + c );
+	uint8_t value_memrr = device->mmu.read(device->cpu.rr[_rr_out]);
+	uint8_t value_r = device->cpu.r[_r_in];
+	bool carry = (device->cpu.r[F] >> 4) & 0x1;
+	
+	uint16_t result = value_r;
+	result += value_memrr;
+	result += uint8_t(carry);
+
+	bool h = (((value_r & 0xf) + (value_memrr & 0xf) + (uint8_t(carry) & 0xf)) & 0x10) == 0x10;
+	bool z = calc_z(uint8_t(result));
+	bool c = calc_c8(result);
+
+	device->cpu.r[_r_in] = uint8_t(result);
+	device->cpu.set_flags(0b1111, (z << 3) + (h << 1) + c);
 }
 
 void adc_r_d8(Device * device, uint8_t _r_in){
-	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
-	uint8_t addr_val = device->cpu.fetch();
-	bool h = calc_h8(device->cpu.r[_r_in], addr_val + c_s, H_SUM);
-	uint16_t sum = device->cpu.r[_r_in];
-	sum += addr_val + c_s;
-	device->cpu.r[_r_in] = uint8_t(sum);
-	bool z = calc_z(device->cpu.r[_r_in]);
-	bool c = calc_c8(sum);
-	device->cpu.set_flags(0b1111, (z << 3) + (h << 1) + c );	
+	uint8_t value_mem = device->cpu.fetch();
+	uint8_t value_r = device->cpu.r[_r_in];
+	bool carry = (device->cpu.r[F] >> 4) & 0x1;
+	
+	uint16_t result = value_r;
+	result += value_mem;
+	result += uint8_t(carry);
+
+	bool h = (((value_r & 0xf) + (value_mem & 0xf) + (uint8_t(carry) & 0xf)) & 0x10) == 0x10;
+	bool z = calc_z(uint8_t(result));
+	bool c = calc_c8(result);
+
+	device->cpu.r[_r_in] = uint8_t(result);
+	device->cpu.set_flags(0b1111, (z << 3) + (h << 1) + c);
 }
 
 void sub_r(Device * device, uint8_t _r_in){
@@ -272,26 +269,36 @@ void sbc_r_r(Device * device, uint8_t _r_in, uint8_t _r_out){
 }
 
 void sbc_r_d8(Device * device, uint8_t _r_in){
-	uint8_t addr_val = device->cpu.fetch();
-	uint16_t res = device->cpu.r[_r_in];
-	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
-	res -= addr_val + c_s;
-	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[_r_in], addr_val+c_s, H_SUB);
-	bool c = calc_c8(res);
-	device->cpu.r[_r_in] = uint8_t(res);
+	uint8_t value_mem = device->cpu.fetch();
+	uint8_t value_r = device->cpu.r[_r_in];
+	bool carry = (device->cpu.r[F] >> 4) & 0x1;
+	
+	uint16_t result = value_r;
+	result -= value_mem;
+	result -= uint8_t(carry);
+
+	bool h = (((value_r & 0xf) - (value_mem & 0xf) - (uint8_t(carry) & 0xf)) & 0x10) == 0x10;
+	bool z = calc_z(uint8_t(result));
+	bool c = calc_c8(result);
+
+	device->cpu.r[_r_in] = uint8_t(result);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
 }
 
 void sbc_r_memrr(Device * device, uint8_t _r_in, uint8_t _rr_out){
-	uint16_t rr = device->cpu.rr[_rr_out];
-	uint16_t res = device->cpu.r[_r_in];
-	bool c_s = (device->cpu.r[F] >> 4) & 0x1;
-	res -= device->mmu.read(rr) + c_s;
-	bool z = calc_z(res);
-	bool h = calc_h8(device->cpu.r[_r_in], device->mmu.read(rr)+c_s, H_SUB);
-	bool c = calc_c8(res);
-	device->cpu.r[_r_in] = uint8_t(res);
+	uint8_t value_memrr = device->mmu.read(device->cpu.rr[_rr_out]);
+	uint8_t value_r = device->cpu.r[_r_in];
+	bool carry = (device->cpu.r[F] >> 4) & 0x1;
+	
+	uint16_t result = value_r;
+	result -= value_memrr;
+	result -= uint8_t(carry);
+
+	bool h = (((value_r & 0xf) - (value_memrr & 0xf) - (uint8_t(carry) & 0xf)) & 0x10) == 0x10;
+	bool z = calc_z(uint8_t(result));
+	bool c = calc_c8(result);
+
+	device->cpu.r[_r_in] = uint8_t(result);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
 }
 
@@ -445,7 +452,7 @@ void xor_r(Device * device, uint8_t _r_in){
 void xor_r_d8(Device * device, uint8_t _r_in){
 	device->cpu.r[_r_in] = device->cpu.r[_r_in] ^ device->cpu.fetch();
 	bool z = calc_z(device->cpu.r[_r_in]);
-	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 1));
+	device->cpu.set_flags(0b1111, z << 3);
 }
 
 void xor_memrr(Device * device, uint8_t _rr_out){
@@ -538,11 +545,16 @@ void ret(Device * device){
 
 void reti(Device * device){
 	// TODO
+	device->cpu.pc = device->mmu.read_16(device->cpu.sp);
+	device->cpu.sp += 2;
 }
 
 void pop_rr(Device * device, uint8_t _rr_in){
 	device->cpu.rr[_rr_in] = device->mmu.read_16(device->cpu.sp);
 	device->cpu.sp += 2;
+	if(_rr_in == AF){
+		device->cpu.r[F] &= 0xf0;
+	}
 }
 
 
@@ -641,7 +653,7 @@ void prefix_cb(Device * device){
 	device->cpu.index_cycles = 0x100 + cb_op;
 	(* device->cpu.cb_instructions[cb_op])(device);
 }
-
+	
 void illegal_op(Device * device){
 	std::cout << "[ERROR] this instruction is ILLEGAL -> " << int(device->mmu.read(device->cpu.pc-1)) << " PC: " << int(device->cpu.pc) << std::endl;
 	device->keep_running = false;
@@ -656,7 +668,22 @@ void ei(Device * device){
 }
 
 void daa(Device * device){
-	//TODO
+	//credits: https://forums.nesdev.org/viewtopic.php?t=15944
+	bool n_flag = (device->cpu.r[F] >> 6) & 1;
+	bool c_flag = (device->cpu.r[F] >> 4) & 1;
+	bool h_flag = (device->cpu.r[F] >> 5) & 1;
+	bool z_flag = (device->cpu.r[F] >> 7) & 1;
+	uint8_t a = device->cpu.r[A];
+	if (!n_flag) {
+		if (c_flag || a > 0x99) { a += 0x60; c_flag = 1; }
+  		if (h_flag || (a & 0x0f) > 0x09) { a += 0x6; }
+	} else {  
+		if (c_flag) { a -= 0x60; }
+  		if (h_flag) { a -= 0x6; }
+	}
+	z_flag = calc_z(a);
+	device->cpu.r[A] = a;
+	device->cpu.set_flags(0b1011, (z_flag << 3) + c_flag);
 }
 
 void stop(Device * device){
@@ -978,7 +1005,7 @@ void rrc_r(Device * device, uint8_t _r){
 void rrc_memrr(Device * device, uint8_t _rr){
 	uint16_t addr = device->cpu.rr[_rr];
 	uint8_t value = device->mmu.read(addr);
-	uint8_t bit = value && 0x1;
+	uint8_t bit = value & 0x1;
 	value = (value >> 1) | (bit << 7);
 	bool z = calc_z(value);
 	device->mmu.write(addr, value);
@@ -1050,12 +1077,13 @@ void sra_r(Device * device, uint8_t _r){
 void sra_memrr(Device * device, uint8_t _rr){
 	uint16_t addr = device->cpu.rr[_rr];
 	uint8_t value = device->mmu.read(addr);
+	bool bit = value & 0x1;
 	uint8_t bit_7 = value & 0x80; // get bit at pos 7
 	value >>= 1;
 	value |= bit_7;
 	device->mmu.write(addr, value);
 	bool z = calc_z(value);
-	device->cpu.set_flags(0b1111, z << 3);
+	device->cpu.set_flags(0b1111, (z << 3) + bit);
 }
 
 void srl_r(Device * device, uint8_t _r){
