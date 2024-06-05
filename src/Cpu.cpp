@@ -4,7 +4,15 @@
 #include <iostream>
 
 #define F 0
-#define INTERRUPT_PENDING ((this->device->mmu.memory[0xffff] & this->device->mmu.memory[0xff0f]) == 0)
+#define IE_ADDR 0xffff
+#define IF_ADDR 0xff0f
+#define VBLANK_INTERRUPT_ADDR 0x40
+#define LCD_INTERRUPT_ADDR 0x48
+#define TIMER_INTERRUPT_ADDR 0x50
+#define SERIAL_INTERRUPT_ADDR 0x58
+#define JOYPAD_INTERRUPT_ADDR 0x60
+#define INTERRUPT_PINS (this->device->mmu.memory[IE_ADDR] & this->device->mmu.memory[IF_ADDR])
+#define INTERRUPT_PENDING (INTERRUPT_PINS == 0)
 
 uint8_t CPU::fetch(){
 	uint8_t value = this->device->mmu.read(this->pc);
@@ -18,14 +26,37 @@ uint16_t CPU::fetch_16(){
 	return value;
 }
 
+void CPU::handle_interrupts(){	
+	uint8_t pins = INTERRUPT_PINS;
+
+	if(!(this->IME && (pins > 0))){
+		return;
+	}
+	
+	// TODO fix cycles for intrrupts
+	for(uint8_t bit = 0; bit < 5; bit++){
+		bool pin_bit_set = (pins >> bit) & 0x1;
+		if(pin_bit_set){
+			this->sp -= 2;
+			this->device->mmu.write_16(this->sp, this->pc);
+			this->pc = VBLANK_INTERRUPT_ADDR + (0x8*bit); // we shift by 0x08 times corresponding to the interrupt address
+			this->IME = false;
+			this->device->mmu.memory[IF_ADDR] ^= (0x1 << bit); // clear the bit
+			break;
+		}
+	}
+	
+}
+
 void CPU::decode_and_execute(){
 	if(!this->halt_mode){
+		this->handle_interrupts();
 		uint8_t op_code = this->fetch();
 		this->index_cycles = op_code;
 		(* this->instructions[op_code])(this->device);
 		return;
 	}
-	this->halt_mode = INTERRUPT_PENDING;	
+	this->halt_mode = INTERRUPT_PENDING;
 }
 
 void CPU::set_flags(uint8_t mask, uint8_t values){

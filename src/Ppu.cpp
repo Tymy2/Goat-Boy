@@ -4,10 +4,11 @@
 #include <iostream>
 #include <stdlib.h>
 
+#define IF_ADDR 0xff0f
 #define LCDC_ADDR 0xff40
 #define STAT_ADDR 0xff41
 #define LY_ADDR 0xff44
-#define LYC_ADDR 0xff41
+#define LYC_ADDR 0xff45
 #define SCY_ADDR 0xff42
 #define SCX_ADDR 0xff43
 #define SCREEN_WIDTH 160
@@ -23,6 +24,9 @@
 #define LCDC_OBJ_SIZE_BIT			0b00000100
 #define LCDC_OBJ_ENABLED_BIT		0b00000010
 #define LCDC_PRIORITY_BIT			0b00000001
+
+#define VBLANK_INTERRUPT_BIT 0b00001
+#define STAT_INTERRUPT_BIT   0b00010
 
 PPU::PPU(){
 	this->pixels = (uint32_t *)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
@@ -107,21 +111,52 @@ void PPU::update_lcdc_variables(){
 	this->priority = lcdc & LCDC_PPU_ENABLED_BIT;
 }
 
+uint8_t get_mode(int clock_ticks, uint8_t scanline){
+	if(scanline >= 144){
+		return 1;
+	}
+
+	uint8_t dots_in_scanline = (clock_ticks / 4) % 456;
+	if(dots_in_scanline <= 80){
+		return 2;
+	}
+
+	if(dots_in_scanline <=252){
+		return 3;
+	}
+	return 0;
+}
+
 void PPU::tick(uint16_t cpu_cycles_index){
 	this->clock += CYCLES[cpu_cycles_index];
 	uint8_t scanline = (this->clock / 4) / 456;
 	this->memory[LY_ADDR] = scanline;
+	bool lyc_eq_ly = (scanline == this->memory[LYC_ADDR]);
+	uint8_t mode = get_mode(this->clock, scanline);
 
-	this->memory[STAT_ADDR] |= (scanline == this->memory[LYC_ADDR]) << 2;
+	// updating STAT register
+	this->memory[STAT_ADDR] |= lyc_eq_ly << 2;
+	this->memory[STAT_ADDR] |= mode;
+
+	// STAT interrupt requested
+	uint8_t interrupts_states = (lyc_eq_ly << 3) + ((0x1 << mode) ^ 0b1000 ); // the xor operation just discards the mode 3
+	uint8_t stat_interrupts_selects = this->memory[STAT_ADDR] >> 3;
+	if((interrupts_states & stat_interrupts_selects) > 0){ // Stat interrupt can trigger
+		this->memory[IF_ADDR] |= STAT_INTERRUPT_BIT;
+	}
+	
+	// VBLANK interrupt requested
+	if(scanline == 144){
+		this->memory[IF_ADDR] |= VBLANK_INTERRUPT_BIT;
+	}
 
 	if(scanline >= 154){
 		this->clock = 0;
 		this->memory[LY_ADDR] = 0;
 		this->update_lcdc_variables();
-
+		
 		if(this->is_enabled){
 			this->update_pixels();
 		}
-
 	}
 }
