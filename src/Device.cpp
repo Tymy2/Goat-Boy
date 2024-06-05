@@ -2,11 +2,15 @@
 #include "headers/instructions.h"
 #include <iostream>
 
+void setup_starting_state(Device * device);
+void debug_print(Device * device);
+
 void Device::init(){
 	this->cpu.device = this;
 	setup_instructions(this);
 	setup_cb_instructions(this);
 	setup_starting_state(this);
+	this->ppu.memory = this->mmu.memory; // setup memory pointer for ppu
 }
 
 void Device::tick(){

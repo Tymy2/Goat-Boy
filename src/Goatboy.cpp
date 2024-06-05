@@ -10,10 +10,8 @@ public:
 	bool keep_running = true;
 
 	void init(int argc, char * argv[]){
-		this->device.init();
 		this->device.mmu.load_from_file(argv[0x1], 0x00);
-		this->device.ppu.memory = this->device.mmu.memory; // setup memory pointer for ppu
-		this->setup_starting_state();
+		this->device.init();
 	}
 	
 	void run(){
@@ -21,10 +19,10 @@ public:
 			if(this->device.keep_running){
 				this->device.tick();
 			}
-			this->gui.handle_events(&this->keep_running);
 			if(this->device.ppu.clock == 0 && this->device.ppu.is_enabled){
 				this->gui.update_pixels(this->device.ppu.pixels);
 			}
+			this->gui.handle_events(&this->keep_running);
 		}
 	}
 

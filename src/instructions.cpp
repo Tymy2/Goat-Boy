@@ -544,7 +544,7 @@ void ret(Device * device){
 }
 
 void reti(Device * device){
-	// TODO
+	device->cpu.IME = true;
 	device->cpu.pc = device->mmu.read_16(device->cpu.sp);
 	device->cpu.sp += 2;
 }
@@ -660,11 +660,11 @@ void illegal_op(Device * device){
 }
 
 void di(Device * device){
-	//TODO
+	device->cpu.IME = false;
 }
 
 void ei(Device * device){
-	//TODO
+	device->cpu.IME = true;
 }
 
 void daa(Device * device){
