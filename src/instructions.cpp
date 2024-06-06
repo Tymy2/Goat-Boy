@@ -27,7 +27,7 @@
 #define calc_h16(a,b,sign) ((((a & 0xfff) + ( sign * (b & 0xfff))) & 0x1000) == 0x1000)
 
 void halt(Device * device){
-	std::cout << "HALT INSTRUCTION CALLED, NOT IMPLEMENTED YET" << std::endl;
+	device->cpu.halt_mode = true;
 }
 
 void ld_rr_d16(Device * device, uint8_t _rr){
@@ -504,7 +504,7 @@ void cp_d8(Device * device){
 	uint8_t addr_val = device->cpu.fetch();
 	uint16_t res = device->cpu.r[A];
 	res -= addr_val;
-	bool z = calc_z(res);
+	bool z = calc_z(uint8_t(res));
 	bool h = calc_h8(device->cpu.r[A], addr_val, H_SUB);
 	bool c = calc_c8(res);
 	device->cpu.set_flags(0b1111, (z << 3) + (0x1 << 2) + (h << 1) + c);
