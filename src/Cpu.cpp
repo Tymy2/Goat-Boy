@@ -6,6 +6,7 @@
 #define F 0
 #define IE_ADDR 0xffff
 #define IF_ADDR 0xff0f
+#define JOYPAD_ADDR 0xff00
 #define VBLANK_INTERRUPT_ADDR 0x40
 #define LCD_INTERRUPT_ADDR 0x48
 #define TIMER_INTERRUPT_ADDR 0x50
@@ -50,6 +51,7 @@ void CPU::handle_interrupts(){
 
 void CPU::decode_and_execute(){
 	if(!this->halt_mode){
+		this->device->mmu.memory[JOYPAD_ADDR] |= 0b1111; // no buttons pressed
 		this->handle_interrupts();
 		uint8_t op_code = this->fetch();
 		this->index_cycles = op_code;
@@ -63,6 +65,6 @@ void CPU::set_flags(uint8_t mask, uint8_t values){
 	uint8_t flags = this->r[F];
 	mask <<= 4;
 	values <<= 4;
-	//								 <-----------error_fix------------->
+	//							   <-----------error_fix------------->
 	this->r[F] = (flags & ~mask) | (values ^ (values & (mask ^ 0xF0)));
 }
