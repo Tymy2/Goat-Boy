@@ -35,6 +35,13 @@ uint16_t MMU::read_16(uint16_t addr){
 }
 
 void MMU::write(uint16_t addr, uint8_t value){
+	// OAM transfer
+	if(addr == 0xff46){
+		uint16_t source = (uint16_t(value) << 8);
+		for(uint16_t i = 0; i <= 0x9f; i++){
+			this->memory[0xfe00 + i] = this->memory[source+i];
+		}
+	}
 	this->memory[addr] = value;
 }
 

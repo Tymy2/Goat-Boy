@@ -28,9 +28,12 @@ uint16_t CPU::fetch_16(){
 }
 
 void CPU::handle_interrupts(){	
-	uint8_t pins = INTERRUPT_PINS;
+	if(!this->IME){
+		return;
+	}
 
-	if(!(this->IME && (pins > 0))){
+	uint8_t pins = INTERRUPT_PINS;
+	if(pins == 0){
 		return;
 	}
 	

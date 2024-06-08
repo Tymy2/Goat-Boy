@@ -28,6 +28,8 @@
 #define VBLANK_INTERRUPT_BIT 0b00001
 #define STAT_INTERRUPT_BIT   0b00010
 
+bool oam_mode = false;
+
 PPU::PPU(){
 	this->pixels = (uint32_t *)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
 }
@@ -37,6 +39,9 @@ PPU::~PPU(){
 }
 
 void PPU::draw_pixel(uint8_t pixel_value, uint16_t x, uint16_t y){
+	if(oam_mode && (pixel_value > 0)){
+		return;
+	}
 	this->pixels[x + (y * SCREEN_WIDTH)] = this->colors[pixel_value];
 }
 
@@ -82,6 +87,71 @@ void PPU::update_pixels(){
     }
 }
 
+void PPU::update_window(){
+	if(!this->is_window_enabled){
+		return;
+	}
+
+	uint8_t WX = this->memory[0xff4b];
+	uint8_t WY = this->memory[0xff4a];
+	if(WX > 166 || WY > 143){
+		return;
+	}
+
+	uint8_t tile_start_x = WX/8;
+	uint8_t tile_start_y = WY/8;
+	int8_t offset_x = WX - (tile_start_x * 8);
+	int8_t offset_y = WY - (tile_start_y * 8);
+	for(uint16_t i = 0; i < 440; i++){
+        uint8_t screen_x = i%20;
+        uint8_t screen_y = i/20;
+
+        uint16_t tilemap_x = ((tile_start_x + screen_x) % 32);
+        uint16_t tilemap_y = ((tile_start_y + screen_y) % 32);
+
+        uint16_t tile_map_index = tilemap_x + (tilemap_y * 32);
+        uint16_t tile_index = this->memory[this->window_tilemap_addr + tile_map_index];
+		this->draw_tile(tile_index, screen_x, screen_y, offset_x, offset_y);
+    }
+
+}
+
+void PPU::update_sprites(){
+	if(!this->is_obj_enabled){
+		return;
+	}
+
+	uint16_t mem_addr = 0xfe00;
+	uint16_t old_tiledata_addr = this->tiledata_addr;
+	this->tiledata_addr = 0x8000;
+	for(uint8_t sprite_i = 0; sprite_i < 40; sprite_i++){
+		uint8_t offset = sprite_i*4;
+		uint8_t y_pos = this->memory[mem_addr+offset]-16;
+		uint8_t x_pos = this->memory[mem_addr+offset+1]-8;
+		uint8_t tile_i = this->memory[mem_addr+offset+2];
+		uint8_t attributes = this->memory[mem_addr+offset+3];
+		
+		if(y_pos >= 144 || x_pos >= 160){
+			continue;
+		}
+		
+		uint8_t tile_x = (x_pos / 8);
+		uint8_t offset_x = x_pos - (tile_x*8);
+		uint8_t tile_y = (y_pos / 8);
+		uint8_t offset_y = y_pos - (tile_y*8);
+
+		oam_mode = (attributes & 0x80) > 0;
+		
+		if(this->obj_size == 16){
+			this->draw_tile(tile_i & 0xfe, tile_x, tile_y, offset_x, offset_y);
+			this->draw_tile(tile_i | 0x01, tile_x, tile_y+1, offset_x, offset_y);
+		}else{
+			this->draw_tile(tile_i, tile_x, tile_y, offset_x, offset_y);
+		}
+		
+	}
+	this->tiledata_addr = old_tiledata_addr;
+}
 
 /*
 LCDC:
@@ -103,12 +173,12 @@ void PPU::update_lcdc_variables(){
 
 	this->is_enabled = lcdc & LCDC_PPU_ENABLED_BIT;	
 	this->window_tilemap_addr = lcdc & LCDC_WINDOW_TILEMAP_BIT ? 0x9C00 : 0x9800;
-	this->is_window_enabled = lcdc & LCDC_WINDOW_TILEMAP_BIT;
+	this->is_window_enabled = lcdc & LCDC_WINDOW_ENABLED_BIT;
 	this->tiledata_addr = lcdc & LCDC_BG_AND_WINDOW_ADDR_BIT ? 0x8000 : 0x9000;
 	this->tilemap_addr = lcdc & LCDC_BG_TILEMAP_BIT ? 0x9C00 : 0x9800;
 	this->obj_size = lcdc & LCDC_OBJ_SIZE_BIT ? 16 : 8;
 	this->is_obj_enabled = lcdc & LCDC_OBJ_ENABLED_BIT;
-	this->priority = lcdc & LCDC_PPU_ENABLED_BIT;
+	this->priority = lcdc & LCDC_PRIORITY_BIT;
 }
 
 uint8_t get_mode(int clock_ticks, uint8_t scanline){
@@ -128,8 +198,8 @@ uint8_t get_mode(int clock_ticks, uint8_t scanline){
 }
 
 void PPU::tick(uint16_t cpu_cycles_index){
-	this->clock += CYCLES[cpu_cycles_index];
-	uint8_t scanline = (this->clock / 4) / 456;
+	this->clock += CYCLES[cpu_cycles_index]*4;
+	uint8_t scanline = this->clock / 456;
 	this->memory[LY_ADDR] = scanline;
 	bool lyc_eq_ly = (scanline == this->memory[LYC_ADDR]);
 	uint8_t mode = get_mode(this->clock, scanline);
@@ -157,6 +227,8 @@ void PPU::tick(uint16_t cpu_cycles_index){
 		
 		if(this->is_enabled){
 			this->update_pixels();
+			this->update_window();
+			this->update_sprites();
 		}
 	}
 }
