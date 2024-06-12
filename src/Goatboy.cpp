@@ -22,7 +22,7 @@ public:
 			if(this->device.ppu.clock == 0 && this->device.ppu.is_enabled){
 				this->gui.update_pixels(this->device.ppu.pixels);
 			}
-			this->gui.handle_events(&this->keep_running);
+			this->gui.handle_events(&this->keep_running, &this->device.mmu.memory[0xff00]);
 		}
 	}
 

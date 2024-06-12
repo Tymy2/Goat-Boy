@@ -2,7 +2,7 @@
 
 #ifndef CYCLES_H
 #define CYCLES_H
-uint8_t CYCLES[0x200] = {
+const uint8_t CYCLES[0x200] = {
 //   0   1   2   3   4   5   6   7   8   9   a   b   c   d   e   f 
 	 4, 12,  8,  8,  4,  4,  8,  4, 20,  8,  8,  8,  4,  4,  8,  4, // 0
 	 4, 12,  8,  8,  4,  4,  8,  4, 12,  8,  8,  8,  4,  4,  8,  4, // 1

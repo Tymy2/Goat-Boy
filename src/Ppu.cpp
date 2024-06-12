@@ -1,8 +1,8 @@
-#include "headers/ppu.h"
-#include "headers/cycles.h"
 #include <cstdlib>
 #include <iostream>
 #include <stdlib.h>
+#include "headers/ppu.h"
+#include "headers/cycles.h"
 
 #define IF_ADDR 0xff0f
 #define LCDC_ADDR 0xff40
@@ -27,6 +27,9 @@
 
 #define VBLANK_INTERRUPT_BIT 0b00001
 #define STAT_INTERRUPT_BIT   0b00010
+
+#define DOTS_PER_CYCLE 4
+#define DOTS_PER_SCANLINE 456
 
 bool oam_mode = false;
 
@@ -174,7 +177,7 @@ void PPU::update_lcdc_variables(){
 	this->is_enabled = lcdc & LCDC_PPU_ENABLED_BIT;	
 	this->window_tilemap_addr = lcdc & LCDC_WINDOW_TILEMAP_BIT ? 0x9C00 : 0x9800;
 	this->is_window_enabled = lcdc & LCDC_WINDOW_ENABLED_BIT;
-	this->tiledata_addr = lcdc & LCDC_BG_AND_WINDOW_ADDR_BIT ? 0x8000 : 0x9000;
+	this->tiledata_addr = lcdc & LCDC_BG_AND_WINDOW_ADDR_BIT ? 0x8000 : 0x8800;
 	this->tilemap_addr = lcdc & LCDC_BG_TILEMAP_BIT ? 0x9C00 : 0x9800;
 	this->obj_size = lcdc & LCDC_OBJ_SIZE_BIT ? 16 : 8;
 	this->is_obj_enabled = lcdc & LCDC_OBJ_ENABLED_BIT;
@@ -198,8 +201,8 @@ uint8_t get_mode(int clock_ticks, uint8_t scanline){
 }
 
 void PPU::tick(uint16_t cpu_cycles_index){
-	this->clock += CYCLES[cpu_cycles_index]*4;
-	uint8_t scanline = this->clock / 456;
+	this->clock += CYCLES[cpu_cycles_index] * DOTS_PER_CYCLE;
+	uint8_t scanline = this->clock / DOTS_PER_SCANLINE;
 	this->memory[LY_ADDR] = scanline;
 	bool lyc_eq_ly = (scanline == this->memory[LYC_ADDR]);
 	uint8_t mode = get_mode(this->clock, scanline);
@@ -223,8 +226,7 @@ void PPU::tick(uint16_t cpu_cycles_index){
 	if(scanline >= 154){
 		this->clock = 0;
 		this->memory[LY_ADDR] = 0;
-		this->update_lcdc_variables();
-		
+		this->update_lcdc_variables();		
 		if(this->is_enabled){
 			this->update_pixels();
 			this->update_window();
