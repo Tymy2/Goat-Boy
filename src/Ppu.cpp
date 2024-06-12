@@ -212,7 +212,7 @@ void PPU::tick(uint16_t cpu_cycles_index){
 	this->memory[STAT_ADDR] |= mode;
 
 	// STAT interrupt requested
-	uint8_t interrupts_states = (lyc_eq_ly << 3) + ((0x1 << mode) ^ 0b1000 ); // the xor operation just discards the mode 3
+	uint8_t interrupts_states = (lyc_eq_ly << 3) + ((0x1 << mode) & 0b111 ); // the and operation just discards the mode 3
 	uint8_t stat_interrupts_selects = this->memory[STAT_ADDR] >> 3;
 	if((interrupts_states & stat_interrupts_selects) > 0){ // Stat interrupt can trigger
 		this->memory[IF_ADDR] |= STAT_INTERRUPT_BIT;
