@@ -5,21 +5,11 @@
 #include <vector>
 #include <fstream>
 
-void dump_mem(uint8_t * memory){
-	std::ofstream out;
-	out.open("dump.mem");
-	for(int i = 0; i < 0x10000; i++){
-		out << memory[i];
-	}
-	out.close();
-}
-
 MMU::MMU(){
 	this->memory = (uint8_t *)malloc(0x10000);
 }
 
 MMU::~MMU(){
-	//dump_mem(this->memory);
 	free(this->memory);
 }
 
@@ -37,10 +27,14 @@ uint16_t MMU::read_16(uint16_t addr){
 void MMU::write(uint16_t addr, uint8_t value){
 	// OAM transfer
 	if(addr == 0xff46){
-		uint16_t source = (uint16_t(value) << 8);
+		uint16_t source = (value << 8);
 		for(uint16_t i = 0; i <= 0x9f; i++){
 			this->memory[0xfe00 + i] = this->memory[source+i];
 		}
+	}
+	// im testing games without mbc, so we want to prevent bank change for now
+	if(addr == 0x2000){
+		return;
 	}
 	this->memory[addr] = value;
 }

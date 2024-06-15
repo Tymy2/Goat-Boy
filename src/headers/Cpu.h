@@ -23,6 +23,7 @@ class CPU {
 		uint16_t fetch_16();
 		void handle_interrupts();
 		void decode_and_execute();
+		void handle_timers();
 		void set_flags(uint8_t, uint8_t);
 };
 #endif

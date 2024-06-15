@@ -42,7 +42,7 @@ PPU::~PPU(){
 }
 
 void PPU::draw_pixel(uint8_t pixel_value, uint16_t x, uint16_t y){
-	if(oam_mode && (pixel_value > 0)){
+	if(oam_mode && ((this->pixels[x + (y * SCREEN_WIDTH)] != this->colors[0]))){
 		return;
 	}
 	this->pixels[x + (y * SCREEN_WIDTH)] = this->colors[pixel_value];
@@ -133,7 +133,6 @@ void PPU::update_sprites(){
 		uint8_t x_pos = this->memory[mem_addr+offset+1]-8;
 		uint8_t tile_i = this->memory[mem_addr+offset+2];
 		uint8_t attributes = this->memory[mem_addr+offset+3];
-		
 		if(y_pos >= 144 || x_pos >= 160){
 			continue;
 		}
@@ -143,8 +142,8 @@ void PPU::update_sprites(){
 		uint8_t tile_y = (y_pos / 8);
 		uint8_t offset_y = y_pos - (tile_y*8);
 
-		oam_mode = (attributes & 0x80) > 0;
-		
+		oam_mode = (attributes & 0x80) >> 7;
+
 		if(this->obj_size == 16){
 			this->draw_tile(tile_i & 0xfe, tile_x, tile_y, offset_x, offset_y);
 			this->draw_tile(tile_i | 0x01, tile_x, tile_y+1, offset_x, offset_y);
@@ -154,6 +153,7 @@ void PPU::update_sprites(){
 		
 	}
 	this->tiledata_addr = old_tiledata_addr;
+	oam_mode = false;
 }
 
 /*
@@ -177,7 +177,7 @@ void PPU::update_lcdc_variables(){
 	this->is_enabled = lcdc & LCDC_PPU_ENABLED_BIT;	
 	this->window_tilemap_addr = lcdc & LCDC_WINDOW_TILEMAP_BIT ? 0x9C00 : 0x9800;
 	this->is_window_enabled = lcdc & LCDC_WINDOW_ENABLED_BIT;
-	this->tiledata_addr = lcdc & LCDC_BG_AND_WINDOW_ADDR_BIT ? 0x8000 : 0x8800;
+	this->tiledata_addr = lcdc & LCDC_BG_AND_WINDOW_ADDR_BIT ? 0x8000 : 0x9000;
 	this->tilemap_addr = lcdc & LCDC_BG_TILEMAP_BIT ? 0x9C00 : 0x9800;
 	this->obj_size = lcdc & LCDC_OBJ_SIZE_BIT ? 16 : 8;
 	this->is_obj_enabled = lcdc & LCDC_OBJ_ENABLED_BIT;
@@ -189,25 +189,27 @@ uint8_t get_mode(int clock_ticks, uint8_t scanline){
 		return 1;
 	}
 
-	uint8_t dots_in_scanline = (clock_ticks / 4) % 456;
+	uint16_t dots_in_scanline = clock_ticks % DOTS_PER_SCANLINE;
 	if(dots_in_scanline <= 80){
 		return 2;
 	}
 
-	if(dots_in_scanline <=252){
+	if(dots_in_scanline <= 252){
 		return 3;
 	}
+
 	return 0;
 }
 
 void PPU::tick(uint16_t cpu_cycles_index){
-	this->clock += CYCLES[cpu_cycles_index] * DOTS_PER_CYCLE;
+	this->clock += CYCLES[cpu_cycles_index]; //* DOTS_PER_CYCLE;
 	uint8_t scanline = this->clock / DOTS_PER_SCANLINE;
 	this->memory[LY_ADDR] = scanline;
 	bool lyc_eq_ly = (scanline == this->memory[LYC_ADDR]);
 	uint8_t mode = get_mode(this->clock, scanline);
 
 	// updating STAT register
+	this->memory[STAT_ADDR] &= 0x78;
 	this->memory[STAT_ADDR] |= lyc_eq_ly << 2;
 	this->memory[STAT_ADDR] |= mode;
 
@@ -226,7 +228,7 @@ void PPU::tick(uint16_t cpu_cycles_index){
 	if(scanline >= 154){
 		this->clock = 0;
 		this->memory[LY_ADDR] = 0;
-		this->update_lcdc_variables();		
+		this->update_lcdc_variables();
 		if(this->is_enabled){
 			this->update_pixels();
 			this->update_window();

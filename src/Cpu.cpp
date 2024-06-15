@@ -2,6 +2,8 @@
 #include "headers/Device.h"
 #include <stdint.h>
 #include <iostream>
+#include <chrono>
+#include "headers/cycles.h"
 
 #define F 0
 #define IE_ADDR 0xffff
@@ -49,16 +51,54 @@ void CPU::handle_interrupts(){
 			break;
 		}
 	}
-	
 }
+
+int clock_divider = 0;
+int clock_tac = 0;
+uint16_t TAC_SPEEDS[4] = { 256, 4, 16, 64 };
+void CPU::handle_timers(){
+	clock_divider += CYCLES[this->index_cycles];
+	while(clock_divider >= 64){
+		clock_divider -= 64;
+		this->device->mmu.memory[0xff04]++;
+	}
+	uint8_t TAC = this->device->mmu.memory[0xff07];
+	bool TAC_enabled = (TAC & 0b100) == 0b100;
+	uint16_t clock_select = TAC_SPEEDS[(TAC & 0b11)];
+	if(TAC_enabled){
+		clock_tac += CYCLES[this->index_cycles];
+		while(clock_tac >= clock_select){
+			clock_tac -= clock_select;
+			this->device->mmu.memory[0xff05]++;
+			if(this->device->mmu.memory[0xff05] == 0){
+				this->device->mmu.memory[0xff05] = this->device->mmu.memory[0xff06];
+				this->device->mmu.memory[0xff0f] |= 0b100;
+			}
+		}
+	}
+}
+
+long ops = 0;
+auto old_ops = std::chrono::high_resolution_clock::now();
+void manage_ops(){
+	ops++;
+	auto now = std::chrono::high_resolution_clock::now();
+	if(std::chrono::duration_cast<std::chrono::seconds>(now-old_ops).count() >= 1){
+		printf("Operations_s: %d\n", ops);
+		ops = 0;
+		old_ops = now;
+	}
+}
+
 
 void CPU::decode_and_execute(){
 	if(!this->halt_mode){
-		this->device->mmu.memory[JOYPAD_ADDR] |= 0b1111; // no buttons pressed
-		this->handle_interrupts();
 		uint8_t op_code = this->fetch();
 		this->index_cycles = op_code;
 		(* this->instructions[op_code])(this->device);
+		this->handle_timers();
+		this->handle_interrupts();
+		manage_ops();
 		return;
 	}
 	this->halt_mode = INTERRUPT_PENDING;
