@@ -7,22 +7,23 @@ class GoatBoy{
 public:
 	GUI gui;
 	Device device;
-	bool keep_running = true;
 
 	void init(int argc, char * argv[]){
-		this->device.mmu.load_from_file(argv[0x1], 0x00);
-		this->device.init();
+		this->device.mmu.load_from_file(argv[0x1]);
+		this->device.init(this->gui.keyboard_ptr);
 	}
 	
 	void run(){
-		while(this->keep_running){
+		while(this->gui.keep_running){
 			if(this->device.keep_running){
 				this->device.tick();
 			}
-			if(this->device.ppu.clock == 0 && this->device.ppu.is_enabled){
+			if(this->device.ppu.frame_ready){
 				this->gui.update_pixels(this->device.ppu.pixels);
+				this->gui.update_keyboard_state();
+				this->gui.handle_events();
+				SDL_Delay(0);
 			}
-			this->gui.handle_events(&this->keep_running, &this->device.mmu.memory[0xff00]);
 		}
 	}
 

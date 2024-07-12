@@ -5,17 +5,22 @@
 void setup_starting_state(Device * device);
 void debug_print(Device * device);
 
-void Device::init(){
+#define IF_ADDR 0xff0f
+#define JOYPAD_ADDR 0xff00
+void Device::init(const uint8_t * keyboard_ptr){
 	this->cpu.device = this;
 	setup_instructions(this);
 	setup_cb_instructions(this);
-	setup_starting_state(this);
-	this->ppu.memory = this->mmu.memory; // setup memory pointer for ppu
+	setup_starting_state(this); // sets after boot rom states
+	this->ppu.memory = this->mmu.memory;
+	this->mmu.ppu_mode_ptr = &this->ppu.current_mode;
+	this->joypad.init(&this->mmu.memory[IF_ADDR], &this->mmu.memory[JOYPAD_ADDR], keyboard_ptr);
 }
 
 void Device::tick(){
-	if(this->debug_enabled) debug_print(this); 
-	this->cpu.decode_and_execute();
+	if(this->debug_enabled) debug_print(this);
+	this->joypad.update();
+	this->cpu.tick();
 	this->ppu.tick(this->cpu.index_cycles);
 }
 

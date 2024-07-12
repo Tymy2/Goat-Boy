@@ -11,9 +11,19 @@
 #define LYC_ADDR 0xff45
 #define SCY_ADDR 0xff42
 #define SCX_ADDR 0xff43
+#define WY_ADDR 0xff4a
+#define WX_ADDR 0xff4b
+#define OAM_ADDR 0xfe00
 #define SCREEN_WIDTH 160
 #define SCREEN_HEIGHT 144
 #define TILE_SIZE 16
+#define TILEMAP_BLOCK_0 0x9800
+#define TILEMAP_BLOCK_1 0x9C00
+#define TILEDATA_BLOCK_0 0x9000
+#define TILEDATA_BLOCK_1 0x8000
+#define OBJ_SIZE_BASIC 8
+#define OBJ_SIZE_EXTENDED 16
+#define MAX_SPRITES_PER_LINE 10
 
 //LCDC bit mask
 #define LCDC_PPU_ENABLED_BIT 		0b10000000
@@ -28,10 +38,13 @@
 #define VBLANK_INTERRUPT_BIT 0b00001
 #define STAT_INTERRUPT_BIT   0b00010
 
+#define MODE_0 0
+#define MODE_1 1
+#define MODE_2 2
+#define MODE_3 3
+
 #define DOTS_PER_CYCLE 4
 #define DOTS_PER_SCANLINE 456
-
-bool oam_mode = false;
 
 PPU::PPU(){
 	this->pixels = (uint32_t *)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
@@ -41,52 +54,45 @@ PPU::~PPU(){
 	free(this->pixels);
 }
 
-void PPU::draw_pixel(uint8_t pixel_value, uint16_t x, uint16_t y){
-	if(oam_mode && ((this->pixels[x + (y * SCREEN_WIDTH)] != this->colors[0]))){
+void PPU::draw_pixel(uint8_t pixel_value, uint16_t x, uint16_t y, bool priority, bool is_sprite){
+	if(priority && (this->pixels[x + (y * SCREEN_WIDTH)] != this->colors[0]) ){
 		return;
 	}
-	this->pixels[x + (y * SCREEN_WIDTH)] = this->colors[pixel_value];
+	if(!is_sprite){
+		uint8_t order = this->memory[0xff47];
+		uint8_t palette_value = (order >> (2 * pixel_value)) & 0x3;
+		this->pixels[x + (y * SCREEN_WIDTH)] = this->colors[palette_value];
+		return;
+	}
+	if(pixel_value != 0){
+		this->pixels[x + (y * SCREEN_WIDTH)] = this->colors[pixel_value];
+	}
 }
 
-void PPU::draw_tile(uint16_t tile_index, uint8_t tile_x, uint8_t tile_y, int8_t offset_x, int8_t offset_y){
-    uint16_t tile_addr = this->tiledata_addr + (tile_index * TILE_SIZE);
-    uint16_t pixel_x = (uint16_t(tile_x) * 8) - offset_x;
-    uint16_t pixel_y = (uint16_t(tile_y) * 8) - offset_y;
-    for(uint8_t i = 0; i < TILE_SIZE; i+=2){
-		uint16_t y_coord_pixel = pixel_y + (i/2);
-		if(y_coord_pixel >= 144){
-			continue;
-		}
-		uint8_t byte_1 = this->memory[tile_addr + i];
-        uint8_t byte_2 = this->memory[tile_addr + i + 1];
-        for(int8_t bit_pos = 7; bit_pos >= offset_x; bit_pos--){
-			uint16_t x_coord_pixel = pixel_x + (7-bit_pos);
-			if(x_coord_pixel >= 160){
-				break;
-			}
-            uint8_t pixel_value = (((byte_2 >> bit_pos) & 1) << 1) + ((byte_1 >> bit_pos) & 1);
-            this->draw_pixel(pixel_value, x_coord_pixel, y_coord_pixel);
-        }
-    }
+uint8_t PPU::get_color_id(uint8_t tile_index, uint8_t tile_pixel_x, uint8_t tile_pixel_y){
+	uint16_t tile_addr = this->tiledata_addr + (tile_index * TILE_SIZE);
+	if(this->tiledata_addr == TILEDATA_BLOCK_0){
+		tile_addr = this->tiledata_addr + (int16_t(int8_t(tile_index)) * TILE_SIZE);
+	}
+	uint8_t tile_row_byte_1 = this->memory[tile_addr + (tile_pixel_y * 2)];
+	uint8_t tile_row_byte_2 = this->memory[tile_addr + (tile_pixel_y * 2) + 1];
+	uint8_t color_id = (((tile_row_byte_2 >> (7-tile_pixel_x)) & 1) << 1) + ((tile_row_byte_1 >> (7-tile_pixel_x)) & 1);
+	return color_id;
 }
 
-void PPU::update_pixels(){
+void PPU::update_background(){
 	uint8_t SCX = this->memory[SCX_ADDR];
 	uint8_t SCY = this->memory[SCY_ADDR];
-	uint8_t tile_start_x = SCX/8;
-	uint8_t tile_start_y = SCY/8;
-	int8_t offset_x = SCX - (tile_start_x * 8);
-	int8_t offset_y = SCY - (tile_start_y * 8);
-    for(uint16_t i = 0; i < 440; i++){
-        uint8_t screen_x = i%20;
-        uint8_t screen_y = i/20;
 
-        uint16_t tilemap_x = ((tile_start_x + screen_x) % 32);
-        uint16_t tilemap_y = ((tile_start_y + screen_y) % 32);
-
-        uint16_t tile_map_index = tilemap_x + (tilemap_y * 32);
-        uint16_t tile_index = this->memory[this->tilemap_addr + tile_map_index];
-		this->draw_tile(tile_index, screen_x, screen_y, offset_x, offset_y);
+	uint8_t tile_pixel_y = (SCY + this->current_scanline) % 8;
+	uint8_t tile_y = ((SCY + this->current_scanline) / 8) % 32;
+	for(uint16_t pixel_i = 0; pixel_i < SCREEN_WIDTH; pixel_i++){
+		uint8_t tile_x = ((SCX + pixel_i) / 8) % 32;
+		uint8_t tile_pixel_x = (SCX + pixel_i) % 8;
+		uint16_t tile_map_index = tile_x + (tile_y * 32);
+        uint8_t tile_index = this->memory[this->tilemap_addr + tile_map_index];
+		uint8_t color_id = this->get_color_id(tile_index, tile_pixel_x, tile_pixel_y);
+		this->draw_pixel(color_id, pixel_i, this->current_scanline, false, false);
     }
 }
 
@@ -94,145 +100,176 @@ void PPU::update_window(){
 	if(!this->is_window_enabled){
 		return;
 	}
-
-	uint8_t WX = this->memory[0xff4b];
-	uint8_t WY = this->memory[0xff4a];
-	if(WX > 166 || WY > 143){
+	if(this->frame_WX > 166 || this->frame_WY > 143){
 		return;
 	}
+	uint16_t WX = this->frame_WX - 7;
+	if(current_scanline < this->frame_WY){
+		return;
+	}
+	uint8_t tile_pixel_y = this->window_screenline_aux % 8;
+	uint8_t tile_y = ((this->window_screenline_aux) / 8) % 32;
+	uint16_t pixel_i_aux = 0;
+	for(uint16_t pixel_i = WX; pixel_i < 160; pixel_i++){
+		uint8_t tile_x = ((pixel_i_aux) / 8) % 32;
+		uint8_t tile_pixel_x = (pixel_i_aux) % 8;	
+		uint16_t tile_map_index = tile_x + (tile_y * 32);
+   	    uint8_t tile_index = this->memory[this->window_tilemap_addr + tile_map_index];
+		uint8_t color_id = this->get_color_id(tile_index, tile_pixel_x, tile_pixel_y);
+		this->draw_pixel(color_id, pixel_i, this->current_scanline, false, false);
+		pixel_i_aux++;
+  	}
+	this->window_screenline_aux++;
+}
 
-	uint8_t tile_start_x = WX/8;
-	uint8_t tile_start_y = WY/8;
-	int8_t offset_x = WX - (tile_start_x * 8);
-	int8_t offset_y = WY - (tile_start_y * 8);
-	for(uint16_t i = 0; i < 440; i++){
-        uint8_t screen_x = i%20;
-        uint8_t screen_y = i/20;
+struct SpriteData PPU::get_SpriteData(uint8_t sprite_index){
+	SpriteData sprite_data;
+	uint8_t offset = sprite_index*4;
+	sprite_data.y = this->memory[OAM_ADDR+offset];
+	sprite_data.x = this->memory[OAM_ADDR+offset+1];
+	sprite_data.tile_index = this->memory[OAM_ADDR+offset+2];
+	uint8_t attributes = this->memory[OAM_ADDR+offset+3];
+	sprite_data.oam_mode = (attributes & 0x80) >> 7;
+	sprite_data.y_flip = (attributes & 0x40) >> 6;
+	sprite_data.x_flip = (attributes & 0x20) >> 5;
+	sprite_data.x_s = int16_t(sprite_data.x) - 8;
+	sprite_data.y_s = int16_t(sprite_data.y) - 16;
+	return sprite_data;
+}
 
-        uint16_t tilemap_x = ((tile_start_x + screen_x) % 32);
-        uint16_t tilemap_y = ((tile_start_y + screen_y) % 32);
-
-        uint16_t tile_map_index = tilemap_x + (tilemap_y * 32);
-        uint16_t tile_index = this->memory[this->window_tilemap_addr + tile_map_index];
-		this->draw_tile(tile_index, screen_x, screen_y, offset_x, offset_y);
+void PPU::draw_sprite_row(struct SpriteData sprite_data, uint8_t sprite_row){
+	uint16_t tile_addr = TILEDATA_BLOCK_1 + (sprite_data.tile_index * TILE_SIZE);
+	uint8_t offset = 2 * (sprite_data.y_flip ? 8 - sprite_row : sprite_row);
+	uint8_t byte_1 = this->memory[tile_addr + offset];
+    uint8_t byte_2 = this->memory[tile_addr + offset + 1];
+    for(int8_t bit_pos = 7; bit_pos >= 0; bit_pos--){
+		int32_t x_coord_pixel = sprite_data.x_s + (sprite_data.x_flip ? bit_pos : (7-bit_pos) );
+		if(x_coord_pixel >= 160 || x_coord_pixel < 0){
+			continue;
+		}
+		uint8_t color_id = (((byte_2 >> bit_pos) & 1) << 1) + ((byte_1 >> bit_pos) & 1);
+    	this->draw_pixel(color_id, x_coord_pixel, this->current_scanline, sprite_data.oam_mode, true);
     }
-
 }
 
 void PPU::update_sprites(){
 	if(!this->is_obj_enabled){
 		return;
 	}
-
-	uint16_t mem_addr = 0xfe00;
-	uint16_t old_tiledata_addr = this->tiledata_addr;
-	this->tiledata_addr = 0x8000;
+	uint8_t sprites_in_line = 0;
 	for(uint8_t sprite_i = 0; sprite_i < 40; sprite_i++){
-		uint8_t offset = sprite_i*4;
-		uint8_t y_pos = this->memory[mem_addr+offset]-16;
-		uint8_t x_pos = this->memory[mem_addr+offset+1]-8;
-		uint8_t tile_i = this->memory[mem_addr+offset+2];
-		uint8_t attributes = this->memory[mem_addr+offset+3];
-		if(y_pos >= 144 || x_pos >= 160){
+		if(sprites_in_line == MAX_SPRITES_PER_LINE){
+			break;
+		}
+		SpriteData sprite_data = this->get_SpriteData(sprite_i);
+		// sprite is unbounded to be seen
+		if( (sprite_data.x >= 168) || (sprite_data.x == 0) || (sprite_data.y >= 160) || (sprite_data.y == 0) ){
 			continue;
 		}
-		
-		uint8_t tile_x = (x_pos / 8);
-		uint8_t offset_x = x_pos - (tile_x*8);
-		uint8_t tile_y = (y_pos / 8);
-		uint8_t offset_y = y_pos - (tile_y*8);
-
-		oam_mode = (attributes & 0x80) >> 7;
-
-		if(this->obj_size == 16){
-			this->draw_tile(tile_i & 0xfe, tile_x, tile_y, offset_x, offset_y);
-			this->draw_tile(tile_i | 0x01, tile_x, tile_y+1, offset_x, offset_y);
-		}else{
-			this->draw_tile(tile_i, tile_x, tile_y, offset_x, offset_y);
+		// if no sprite pixel is inside the scanline, continue
+		if( (current_scanline < sprite_data.y_s) || (current_scanline >= (sprite_data.y_s + this->obj_size)) ){
+			continue;
 		}
-		
+		uint8_t sprite_row = this->current_scanline - sprite_data.y_s;
+		if(this->obj_size == 16){
+			sprite_data.tile_index = sprite_row < OBJ_SIZE_BASIC ? sprite_data.tile_index & 0xfe : sprite_data.tile_index | 0x01;
+			sprite_row %= 8;
+		}
+		this->draw_sprite_row(sprite_data, sprite_row);
+		sprites_in_line++;
 	}
-	this->tiledata_addr = old_tiledata_addr;
-	oam_mode = false;
 }
 
-/*
-LCDC:
-	bit 7 -> LCD & PPU enable: 0 = Off; 1 = On
-	bit 6 -> Window tile map area: 0 = 9800–9BFF; 1 = 9C00–9FFF
-	bit 5 -> Window enable: 0 = Off; 1 = On
-	bit 4 -> BG & Window tile data area: 0 = 8800–97FF; 1 = 8000–8FFF
-	bit 3 -> BG tile map area: 0 = 9800–9BFF; 1 = 9C00–9FFF
-	bit 2 -> OBJ size: 0 = 8×8; 1 = 8×16
-	bit 1 -> OBJ enable: 0 = Off; 1 = On
-	bit 0 -> BG & Window enable / priority [Different meaning in CGB Mode]: 0 = Off; 1 = On
-*/
 void PPU::update_lcdc_variables(){
 	uint8_t lcdc = this->memory[LCDC_ADDR];
 	if(lcdc == this->last_lcdc){ // if nothing changed, then dont bother in updating
 		return;
 	}
 	this->last_lcdc = lcdc;
-
 	this->is_enabled = lcdc & LCDC_PPU_ENABLED_BIT;	
-	this->window_tilemap_addr = lcdc & LCDC_WINDOW_TILEMAP_BIT ? 0x9C00 : 0x9800;
+	this->window_tilemap_addr = lcdc & LCDC_WINDOW_TILEMAP_BIT ? TILEMAP_BLOCK_1 : TILEMAP_BLOCK_0;
 	this->is_window_enabled = lcdc & LCDC_WINDOW_ENABLED_BIT;
-	this->tiledata_addr = lcdc & LCDC_BG_AND_WINDOW_ADDR_BIT ? 0x8000 : 0x9000;
-	this->tilemap_addr = lcdc & LCDC_BG_TILEMAP_BIT ? 0x9C00 : 0x9800;
-	this->obj_size = lcdc & LCDC_OBJ_SIZE_BIT ? 16 : 8;
+	this->tiledata_addr = lcdc & LCDC_BG_AND_WINDOW_ADDR_BIT ? TILEDATA_BLOCK_1 : TILEDATA_BLOCK_0;
+	this->tilemap_addr = lcdc & LCDC_BG_TILEMAP_BIT ? TILEMAP_BLOCK_1 : TILEMAP_BLOCK_0;
+	this->obj_size = lcdc & LCDC_OBJ_SIZE_BIT ? OBJ_SIZE_EXTENDED : OBJ_SIZE_BASIC;
 	this->is_obj_enabled = lcdc & LCDC_OBJ_ENABLED_BIT;
 	this->priority = lcdc & LCDC_PRIORITY_BIT;
 }
 
-uint8_t get_mode(int clock_ticks, uint8_t scanline){
+uint8_t get_mode(int clock_ticks, uint16_t scanline){
 	if(scanline >= 144){
-		return 1;
+		return MODE_1;
 	}
 
 	uint16_t dots_in_scanline = clock_ticks % DOTS_PER_SCANLINE;
 	if(dots_in_scanline <= 80){
-		return 2;
+		return MODE_2;
 	}
 
 	if(dots_in_scanline <= 252){
-		return 3;
+		return MODE_3;
 	}
 
-	return 0;
+	return MODE_0;
 }
 
-void PPU::tick(uint16_t cpu_cycles_index){
-	this->clock += CYCLES[cpu_cycles_index]; //* DOTS_PER_CYCLE;
-	uint8_t scanline = this->clock / DOTS_PER_SCANLINE;
-	this->memory[LY_ADDR] = scanline;
-	bool lyc_eq_ly = (scanline == this->memory[LYC_ADDR]);
-	uint8_t mode = get_mode(this->clock, scanline);
+void PPU::handle_interrupts(){
+	bool lyc_eq_ly = (this->current_scanline == this->memory[LYC_ADDR]);
 
 	// updating STAT register
 	this->memory[STAT_ADDR] &= 0x78;
 	this->memory[STAT_ADDR] |= lyc_eq_ly << 2;
-	this->memory[STAT_ADDR] |= mode;
+	this->memory[STAT_ADDR] |= this->current_mode;
 
 	// STAT interrupt requested
-	uint8_t interrupts_states = (lyc_eq_ly << 3) + ((0x1 << mode) & 0b111 ); // the and operation just discards the mode 3
+	uint8_t interrupts_states = (lyc_eq_ly << 3) + ((0x1 << this->current_mode) & 0b111 ); // the and operation just discards the mode 3
 	uint8_t stat_interrupts_selects = this->memory[STAT_ADDR] >> 3;
 	if((interrupts_states & stat_interrupts_selects) > 0){ // Stat interrupt can trigger
 		this->memory[IF_ADDR] |= STAT_INTERRUPT_BIT;
 	}
-	
+
 	// VBLANK interrupt requested
-	if(scanline == 144){
+	if(this->current_scanline == 144){
 		this->memory[IF_ADDR] |= VBLANK_INTERRUPT_BIT;
+		this->frame_ready = true;
+	}
+}
+
+void PPU::tick(uint16_t cpu_cycles_index){
+	this->update_lcdc_variables();
+	if(!this->is_enabled){
+		return;
+	}
+	this->frame_ready = false;
+
+	this->clock += CYCLES[cpu_cycles_index];// * DOTS_PER_CYCLE;
+	uint8_t scanline = this->clock / DOTS_PER_SCANLINE;
+	this->memory[LY_ADDR] = scanline;
+	uint8_t previous_mode = this->current_mode;
+	this->current_mode = get_mode(this->clock, scanline);
+
+	if(this->current_scanline != scanline){
+		this->current_scanline = scanline;
+		this->handle_interrupts();
+		if(this->current_scanline == 0){
+			this->frame_WX = this->memory[WX_ADDR];
+			this->frame_WY = this->memory[WY_ADDR];
+
+		}else if(this->current_scanline >= 154){
+			this->clock = 0;
+			this->memory[LY_ADDR] = 0;
+			this->current_scanline = -1;
+			this->window_screenline_aux = 0;
+			return;
+		}
 	}
 
-	if(scanline >= 154){
-		this->clock = 0;
-		this->memory[LY_ADDR] = 0;
-		this->update_lcdc_variables();
-		if(this->is_enabled){
-			this->update_pixels();
+	if(this->current_mode != previous_mode){
+		if(this->current_scanline < 144 && this->current_mode == MODE_3){
+			this->update_background();
 			this->update_window();
 			this->update_sprites();
 		}
 	}
+
 }

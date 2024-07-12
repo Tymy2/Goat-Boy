@@ -35,3 +35,5 @@
 build/*
 libs/*
 roms/*
+!build/.gitignore
+!libs/.gitignore

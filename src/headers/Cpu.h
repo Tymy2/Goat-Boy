@@ -18,11 +18,13 @@ class CPU {
 		void (* cb_instructions[0x100])(Device *) = {};
 		uint16_t index_cycles = 0; // used to get bot cpu cycles and ppu dots
 		Device * device = NULL;
+		int tac_clock = 0;
+		int div_clock = 0;
 
 		uint8_t fetch();
 		uint16_t fetch_16();
 		void handle_interrupts();
-		void decode_and_execute();
+		void tick();
 		void handle_timers();
 		void set_flags(uint8_t, uint8_t);
 };

@@ -14,6 +14,10 @@
 #define TIMER_INTERRUPT_ADDR 0x50
 #define SERIAL_INTERRUPT_ADDR 0x58
 #define JOYPAD_INTERRUPT_ADDR 0x60
+#define DIV_ADDR 0xff04
+#define TIMA_ADDR 0xff05
+#define TMA_ADDR 0xff06
+#define TAC_ADDR 0xff07
 #define INTERRUPT_PINS (this->device->mmu.memory[IE_ADDR] & this->device->mmu.memory[IF_ADDR])
 #define INTERRUPT_PENDING (INTERRUPT_PINS == 0)
 
@@ -53,52 +57,41 @@ void CPU::handle_interrupts(){
 	}
 }
 
-int clock_divider = 0;
-int clock_tac = 0;
-uint16_t TAC_SPEEDS[4] = { 256, 4, 16, 64 };
+const uint16_t TAC_SPEEDS[4] = { 256, 4, 16, 64 };
 void CPU::handle_timers(){
-	clock_divider += CYCLES[this->index_cycles];
-	while(clock_divider >= 64){
-		clock_divider -= 64;
-		this->device->mmu.memory[0xff04]++;
+	this->div_clock += CYCLES[this->index_cycles];
+	while(this->div_clock >= 64){
+		this->div_clock -= 64;
+		this->device->mmu.memory[DIV_ADDR]++;
 	}
-	uint8_t TAC = this->device->mmu.memory[0xff07];
+	uint8_t TAC = this->device->mmu.memory[TAC_ADDR];
 	bool TAC_enabled = (TAC & 0b100) == 0b100;
+		
+	if(!TAC_enabled){
+		return;
+	}
+	
 	uint16_t clock_select = TAC_SPEEDS[(TAC & 0b11)];
-	if(TAC_enabled){
-		clock_tac += CYCLES[this->index_cycles];
-		while(clock_tac >= clock_select){
-			clock_tac -= clock_select;
-			this->device->mmu.memory[0xff05]++;
-			if(this->device->mmu.memory[0xff05] == 0){
-				this->device->mmu.memory[0xff05] = this->device->mmu.memory[0xff06];
-				this->device->mmu.memory[0xff0f] |= 0b100;
-			}
+	this->tac_clock += CYCLES[this->index_cycles];
+	while(this->tac_clock >= clock_select){
+		this->tac_clock -= clock_select;
+		this->device->mmu.memory[TIMA_ADDR]++;
+		if(this->device->mmu.memory[TIMA_ADDR] == 0){
+			this->device->mmu.memory[TIMA_ADDR] = this->device->mmu.memory[TMA_ADDR];
+			this->device->mmu.memory[IF_ADDR] |= 0b100;
 		}
 	}
 }
 
-long ops = 0;
-auto old_ops = std::chrono::high_resolution_clock::now();
-void manage_ops(){
-	ops++;
-	auto now = std::chrono::high_resolution_clock::now();
-	if(std::chrono::duration_cast<std::chrono::seconds>(now-old_ops).count() >= 1){
-		printf("Operations_s: %d\n", ops);
-		ops = 0;
-		old_ops = now;
-	}
-}
-
-
-void CPU::decode_and_execute(){
+void CPU::tick(){
 	if(!this->halt_mode){
 		uint8_t op_code = this->fetch();
 		this->index_cycles = op_code;
-		(* this->instructions[op_code])(this->device);
+
+		(* this->instructions[op_code])(this->device); // execute instruction
+		
 		this->handle_timers();
 		this->handle_interrupts();
-		manage_ops();
 		return;
 	}
 	this->halt_mode = INTERRUPT_PENDING;
