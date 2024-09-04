@@ -23,6 +23,7 @@ class GUI{
 	public:
 		GUI();
 		~GUI();
+		void init();
 		void handle_events();
 		void update_pixels(uint32_t * pixels);
 		void update_keyboard_state();

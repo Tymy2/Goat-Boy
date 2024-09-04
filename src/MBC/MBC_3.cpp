@@ -1,4 +1,6 @@
 #include "headers/MBC_3.h"
+#include <iostream>
+#include <fstream>
 
 #define ROM_BANK_0_END 0x4000
 #define SWITCHABLE_ROM_BANK_END 0x8000
@@ -9,9 +11,11 @@
 #define OAM_END 0xFEA0
 #define UNUSED_RAM_END 0xFF00
 
+#define RAM_SIZE 0x8000
+
 MBC_3::MBC_3(){
 	this->rom = (uint8_t *)malloc(ROM_BANK_0_END*128);
-	this->ram = (uint8_t *)malloc(0x2000*4);
+	this->ram = (uint8_t *)malloc(RAM_SIZE);
 }
 
 MBC_3::~MBC_3(){
@@ -24,7 +28,7 @@ void MBC_3::load_rom(std::vector<char> rom_data){
 }
 
 void MBC_3::load_ram(std::vector<char> ram_data){
-	std::copy(ram_data.begin(), ram_data.begin()+(0x2000*4), ram);
+	std::copy(ram_data.begin(), ram_data.begin() + RAM_SIZE, ram);
 }
 
 uint8_t MBC_3::read_rom(uint16_t addr){
@@ -75,5 +79,18 @@ void MBC_3::write(uint16_t addr, uint8_t value){
 }
 
 void MBC_3::save_data(){
-	// TODO
+	if(this->savefile_path.empty()){
+		return;
+	}
+	
+	std::ofstream savefile_stream(this->savefile_path);
+	
+	if(savefile_stream.is_open()){
+		for(int i = 0; i < RAM_SIZE; i++){
+			savefile_stream << this->ram[i];
+		}
+		savefile_stream.close();
+	}else{
+		printf("[ERROR] Couldnt write save file.");
+	}
 }

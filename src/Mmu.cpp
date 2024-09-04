@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <vector>
 #include <fstream>
+#include <filesystem>
 
 #define MODE_3 3
 #define MODE_2 2
@@ -22,6 +23,7 @@
 
 MMU::MMU(){
 	this->memory = (uint8_t *)malloc(0x10000);
+	this->mbc = new MBC_0();
 }
 
 MMU::~MMU(){
@@ -114,7 +116,7 @@ void MMU::write_16(uint16_t addr, uint16_t value){
 	this->write(addr+1, value >> 8);
 }
 
-void MMU::load_from_file(char const * filepath){
+std::vector<char> read_file(char const * filepath){
 	std::ifstream ifs(filepath, std::ios::binary|std::ios::ate);
     std::ifstream::pos_type pos = ifs.tellg();
 
@@ -123,17 +125,59 @@ void MMU::load_from_file(char const * filepath){
     ifs.seekg(0, std::ios::beg);
     ifs.read(&result[0], pos);
 
+	ifs.close();
+	
+	return result;
+}
+
+void MMU::load_rom(char const * filepath){
+	delete this->mbc; // free previous rom memory
+
+	if(!std::filesystem::exists(filepath)){
+		printf("[ERROR] File with path \"%s\" does not exist.\n", filepath);
+		this->mbc = new MBC_0();
+		return;
+	}
+
+	std::vector<char> result = read_file(filepath);
+	if(result.size() < 0x8000){
+		printf("[ERROR] ROM file is smaller than 32KiB, it wont be loaded.\n");
+		this->mbc = new MBC_0();
+		return;
+	}
+
 	uint8_t MBC_type = result.at(0x0147);
 	if(MBC_type == 0x00){
 		this->mbc = new MBC_0();
 	}else if(MBC_type >= 0x0f && MBC_type <= 0x13){
 		this->mbc = new MBC_3();
 	}else{
-		printf("MBC type not supported, defaulting to MBC 0.\n");
+		printf("[ERROR] MBC type not supported\n");
 		this->mbc = new MBC_0();
+		return;
 	}
 
 	this->mbc->load_rom(result);
+}
 
-	ifs.close();
+void MMU::load_savefile(char const * filepath){
+	if(!std::filesystem::exists(filepath)){
+		printf("[INFO] Savefile with path \"%s\" does not exist.\n", filepath);
+		this->mbc->savefile_path = filepath;
+		return;
+	}
+
+	std::vector<char> result = read_file(filepath);
+
+	if(result.size() < 0x2000){
+		printf("[ERROR] Savefile is smaller than 8KiB, it wont be loaded.\n");
+		return;
+	}
+
+	this->mbc->savefile_path = filepath;
+	this->mbc->load_ram(result);
+}
+
+void MMU::save_savefile(){
+	this->mbc->save_data();
 }

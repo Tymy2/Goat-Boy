@@ -4,6 +4,10 @@
 #include <chrono>
 
 GUI::GUI(){
+	
+}
+
+void GUI::init(){
 	if(SDL_Init(SDL_INIT_EVERYTHING) < 0){
 		return;
 	}

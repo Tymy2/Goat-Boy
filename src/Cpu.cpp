@@ -57,11 +57,12 @@ void CPU::handle_interrupts(){
 	}
 }
 
+#define DIV_CYCLES_PER_TICK 64
 const uint16_t TAC_SPEEDS[4] = { 256, 4, 16, 64 };
 void CPU::handle_timers(){
 	this->div_clock += CYCLES[this->index_cycles];
-	while(this->div_clock >= 64){
-		this->div_clock -= 64;
+	while(this->div_clock >= DIV_CYCLES_PER_TICK){
+		this->div_clock -= DIV_CYCLES_PER_TICK;
 		this->device->mmu.memory[DIV_ADDR]++;
 	}
 	uint8_t TAC = this->device->mmu.memory[TAC_ADDR];
