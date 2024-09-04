@@ -28,6 +28,7 @@ class GUI{
 		void update_pixels(uint32_t * pixels);
 		void update_keyboard_state();
 		void manage_framerate();
+		bool * debug_enabled = NULL;
 		const uint8_t * keyboard_ptr = NULL;
 		bool keep_running = true;
 };

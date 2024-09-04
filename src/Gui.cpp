@@ -30,6 +30,11 @@ void GUI::handle_events(){
       		this->keep_running = false;
 			return;
    		}
+		if(event.type == SDL_KEYDOWN){
+			if(event.key.keysym.scancode == SDL_SCANCODE_D){
+				*this->debug_enabled = !*this->debug_enabled;
+			}
+		}
 	}
 }
 

@@ -36,7 +36,17 @@ You can get a little bit of info using the argument `--help`.
 
 And thats it!
 
+## Controls
+
+- START -> ESCAPE
+- SELECT -> TAB
+- B -> BACKSPACE
+- A -> SPACE
+
 ## Notes
 
 - If you have any trouble with the emulator you can report it to me and i may fix it. Again, this is a personal project with the objectie of learning so i might not maintain it in the future.
 - Project has been only been tested on a `Windows 10` machine using `CL` for the compiler.
+- Games tested: Tetris, Pokemon yellow.
+- Theres a bug currently with the tetris where after landing the first piece it enters an infinite loop.
+- You can activate and deactivate debug mode by pressing `d` at any moment.
