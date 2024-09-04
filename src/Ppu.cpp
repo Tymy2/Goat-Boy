@@ -265,6 +265,7 @@ void PPU::tick(uint16_t cpu_cycles_index){
 	}
 
 	if(this->current_mode != previous_mode){
+		this->handle_interrupts();
 		if(this->current_scanline < 144 && this->current_mode == MODE_3){
 			this->update_background();
 			this->update_window();
